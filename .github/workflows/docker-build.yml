@@ -3,6 +3,13 @@ name: Build and Push Docker Image
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Custom tag for the Docker image (optional)'
+        required: false
+        default: 'latest'
+        type: string
 
 jobs:
   build:
@@ -31,11 +38,19 @@ jobs:
           result-encoding: string
           script: return 'ghcr.io/${{ github.repository }}'.toLowerCase()
 
+      - name: Determine tags
+        id: tags
+        run: |
+          BASE_TAG="${{ steps.repo_slug.outputs.result }}"
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            echo "tags=${BASE_TAG}:${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tags=${BASE_TAG}:latest,${BASE_TAG}:${{ github.sha }}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
-          tags: |
-            ${{ steps.repo_slug.outputs.result }}:latest
-            ${{ steps.repo_slug.outputs.result }}:${{ github.sha }}
+          tags: ${{ steps.tags.outputs.tags }}
