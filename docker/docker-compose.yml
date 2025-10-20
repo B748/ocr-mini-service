@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  tesseract-api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: production
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    volumes:
+      # Optional: Mount custom Tesseract data for additional languages
+      - tesseract-data:/usr/share/tesseract-ocr/4.00/tessdata/
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/ocr/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  tesseract-data:
+    driver: local

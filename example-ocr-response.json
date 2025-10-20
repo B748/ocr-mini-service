@@ -1,0 +1,39 @@
+{
+  "success": true,
+  "text": "Hessisches Amt für Versorgung",
+  "confidence": 91.59,
+  "words": [
+    {
+      "text": "Hessisches",
+      "confidence": 92.800919,
+      "x": 260,
+      "y": 94,
+      "width": 310,
+      "height": 46
+    },
+    {
+      "text": "Amt",
+      "confidence": 96.918564,
+      "x": 585,
+      "y": 94,
+      "width": 110,
+      "height": 45
+    },
+    {
+      "text": "für",
+      "confidence": 86.635704,
+      "x": 713,
+      "y": 92,
+      "width": 72,
+      "height": 47
+    },
+    {
+      "text": "Versorgung",
+      "confidence": 90.998314,
+      "x": 801,
+      "y": 93,
+      "width": 311,
+      "height": 56
+    }
+  ]
+}
