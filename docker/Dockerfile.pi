@@ -55,7 +55,7 @@ COPY --from=builder --chown=tesseract:nodejs /app/dist ./dist
 COPY --from=builder --chown=tesseract:nodejs /app/package*.json ./
 
 # Copy entrypoint script
-COPY --chown=tesseract:nodejs docker-entrypoint.sh /usr/local/bin/
+COPY --chown=tesseract:nodejs docker/docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Create temp directory with proper ownership before switching user
