@@ -51,7 +51,7 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: ./docker              # Build-Kontext auf den Docker-Ordner
-          file: ./docker/Dockerfile      # Pfad zur Dockerfile
+          context: .
+          file: ./docker/Dockerfile
           push: true
           tags: ${{ steps.tags.outputs.tags }}
