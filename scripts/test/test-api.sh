@@ -5,7 +5,7 @@
 
 set -e
 
-API_URL="${1:-http://localhost:3000}"
+API_URL="${1:-http://localhost:8600}"
 FAILED_TESTS=0
 
 # Colors

@@ -79,8 +79,8 @@ cat > "$TEMP_DIR/DEPLOY.md" << 'EOF'
    ```
 
 ## Service URLs:
-- Status: http://localhost:3000/ocr/status
-- API: http://localhost:3000/ocr/process
+- Status: http://localhost:8600/ocr/status
+- API: http://localhost:8600/ocr/process
 
 ## Management:
 - View logs: `./deploy.sh logs`

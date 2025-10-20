@@ -137,7 +137,7 @@ docker build -t ocr-microservice .
 docker build --target production -t ocr-microservice:latest .
 
 # Run container
-docker run -p 3000:3000 ocr-microservice:latest
+docker run -p 8600:8600 ocr-microservice:latest
 
 # Deploy to registry
 docker push ocr-microservice:latest

@@ -5,7 +5,7 @@
 
 set -e
 
-API_URL="${2:-http://localhost:3000}"
+API_URL="${2:-http://localhost:8600}"
 IMAGE_FILE="${1}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 

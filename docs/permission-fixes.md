@@ -66,7 +66,7 @@ USER tesseract
 ```bash
 # Build and run container
 docker build -f docker/Dockerfile -t tesseract-api:test .
-docker run -d --name tesseract-test -p 3000:3000 tesseract-api:test
+docker run -d --name tesseract-test -p 8600:8600 tesseract-api:test
 
 # Check permissions
 docker exec tesseract-test ls -la /tmp/tesseract-api
@@ -78,7 +78,7 @@ docker exec tesseract-test touch /tmp/tesseract-api/test-file
 
 ### API Debug Endpoint
 ```bash
-curl http://localhost:3000/ocr/debug | jq .tempDirectory
+curl http://localhost:8600/ocr/debug | jq .tempDirectory
 ```
 
 Expected output:
@@ -121,7 +121,7 @@ If permission issues persist:
 1. **Check Container Logs**: `docker logs <container-name>`
 2. **Verify User Context**: `docker exec <container> id`
 3. **Check Directory**: `docker exec <container> ls -la /tmp/tesseract-api`
-4. **Run Debug Endpoint**: `curl http://localhost:3000/ocr/debug`
+4. **Run Debug Endpoint**: `curl http://localhost:8600/ocr/debug`
 5. **Use Permission Test**: `./scripts/test/test-permissions.sh`
 
 The fixes ensure that the Tesseract-API container works correctly across different deployment scenarios while maintaining security best practices.

@@ -6,7 +6,7 @@
 set -e
 
 # CONFIGURATION
-API_BASE_URL="${1:-${API_BASE_URL:-http://localhost:3000}}"
+API_BASE_URL="${1:-${API_BASE_URL:-http://localhost:8600}}"
 TEST_IMAGE="${TEST_IMAGE:-doc.1.jpg}"
 TIMEOUT="${TIMEOUT:-300}"
 
@@ -133,7 +133,7 @@ case "${1:-}" in
         echo "Usage: $0 [api-url] [options]"
         echo
         echo "Arguments:"
-        echo "  api-url         API base URL (default: http://localhost:3000)"
+        echo "  api-url         API base URL (default: http://localhost:8600)"
         echo
         echo "Environment variables:"
         echo "  API_BASE_URL    API base URL (overridden by first argument)"
@@ -142,8 +142,8 @@ case "${1:-}" in
         echo
         echo "Examples:"
         echo "  $0                                    # Use defaults"
-        echo "  $0 http://api:3000                   # Custom API URL"
-        echo "  API_BASE_URL=http://api:3000 $0      # Custom API URL via env"
+        echo "  $0 http://api:8600                   # Custom API URL"
+        echo "  API_BASE_URL=http://api:8600 $0      # Custom API URL via env"
         echo "  TEST_IMAGE=my-test.jpg $0            # Custom test image"
         echo "  TIMEOUT=600 $0                       # Custom timeout"
         exit 0

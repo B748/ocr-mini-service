@@ -103,8 +103,8 @@ start() {
     # Check if service is healthy
     if docker compose -f $COMPOSE_FILE ps | grep -q "healthy\|Up"; then
         log "Tesseract-API is running successfully!"
-        log "Service available at: http://localhost:3000"
-        log "API status: http://localhost:3000/ocr/status"
+        log "Service available at: http://localhost:8600"
+        log "API status: http://localhost:8600/ocr/status"
     else
         error "Service failed to start properly. Check logs with: ./deploy.sh logs"
     fi
@@ -138,7 +138,7 @@ status() {
 
     echo ""
     log "Health check:"
-    curl -s http://localhost:3000/ocr/status 2>/dev/null | jq . || echo "Service not responding"
+    curl -s http://localhost:8600/ocr/status 2>/dev/null | jq . || echo "Service not responding"
 }
 
 cleanup() {

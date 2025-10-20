@@ -156,7 +156,7 @@ cd scripts/deploy
 ```bash
 # Build and run manually
 docker build -f docker/Dockerfile -t tesseract-api:latest .
-docker run -d -p 3000:3000 --name tesseract-api tesseract-api:latest
+docker run -d -p 8600:8600 --name tesseract-api tesseract-api:latest
 ```
 
 ## Configuration

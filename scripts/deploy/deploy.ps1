@@ -70,8 +70,8 @@ function Start-Service {
     $status = docker compose -f $ComposeFile ps --format json | ConvertFrom-Json
     if ($status.State -eq "running") {
         Write-Log "Tesseract-API is running successfully!"
-        Write-Log "Service available at: http://localhost:3000"
-        Write-Log "API status: http://localhost:3000/ocr/status"
+        Write-Log "Service available at: http://localhost:8600"
+        Write-Log "API status: http://localhost:8600/ocr/status"
     } else {
         Write-Error "Service failed to start properly. Check logs with: .\deploy.ps1 logs"
     }
@@ -110,7 +110,7 @@ function Show-Status {
     Write-Host ""
     Write-Log "Health check:"
     try {
-        $response = Invoke-RestMethod -Uri "http://localhost:3000/ocr/status" -TimeoutSec 5
+        $response = Invoke-RestMethod -Uri "http://localhost:8600/ocr/status" -TimeoutSec 5
         $response | ConvertTo-Json -Depth 3
     } catch {
         Write-Host "Service not responding"

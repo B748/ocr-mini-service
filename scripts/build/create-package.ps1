@@ -118,9 +118,9 @@ try {
    ``````
 
 ## Service URLs:
-- Status: http://localhost:3000/ocr/status
-- Debug: http://localhost:3000/ocr/debug
-- API: http://localhost:3000/ocr/process
+- Status: http://localhost:8600/ocr/status
+- Debug: http://localhost:8600/ocr/debug
+- API: http://localhost:8600/ocr/process
 
 ## Management Commands:
 - View logs: ``./deploy.sh logs``

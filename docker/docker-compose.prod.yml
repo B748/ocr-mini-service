@@ -6,10 +6,10 @@ services:
       target: production
     container_name: tesseract-api-test-${USER:-testuser}  # Unique name per user
     ports:
-      - "${TEST_PORT:-3000}:3000"  # Configurable port to avoid conflicts
+      - "${TEST_PORT:-8600}:8600"  # Configurable port to avoid conflicts
     environment:
       - NODE_ENV=production
-      - PORT=3000
+      - PORT=8600
     volumes:
       # User-space Tesseract language data (no system pollution)
       - ../testing/docker-data/tesseract-data:/usr/share/tesseract-ocr/4.00/tessdata/
@@ -17,7 +17,7 @@ services:
       - ../testing/docker-data/tmp:/tmp/tesseract-api:Z
     restart: "no"  # Don't auto-restart on shared machine
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/ocr/status"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8600/ocr/status"]
       interval: 60s  # Less frequent on shared machine
       timeout: 10s
       retries: 2

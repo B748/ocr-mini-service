@@ -346,7 +346,7 @@ cd scripts/test
 # save as load-test.sh
 for i in {1..10}; do
     echo "Test $i/10"
-    time curl -X POST -F "image=@test-image.jpg" http://localhost:3000/ocr/process
+    time curl -X POST -F "image=@test-image.jpg" http://localhost:8600/ocr/process
     sleep 5  # Wait between requests
 done
 ```
@@ -508,8 +508,8 @@ cd deploy
  ✔ Container tesseract-api          Started
 [2024-01-XX XX:XX:XX] Waiting for service to be ready...
 [2024-01-XX XX:XX:XX] Tesseract-API test instance is running successfully!
-[2024-01-XX XX:XX:XX] Test service available at: http://localhost:3000
-[2024-01-XX XX:XX:XX] API status: http://localhost:3000/ocr/status
+[2024-01-XX XX:XX:XX] Test service available at: http://localhost:8600
+[2024-01-XX XX:XX:XX] API status: http://localhost:8600/ocr/status
 ```
 
 ### Successful Test Output
@@ -595,7 +595,7 @@ chmod +x test-api-simple.sh
 ./test-api-simple.sh
 
 # Or specify different URL
-./test-api-simple.sh http://192.168.1.100:3000
+./test-api-simple.sh http://192.168.1.100:8600
 ```
 
 ### Complete OCR Test with SSE Monitoring
@@ -610,7 +610,7 @@ chmod +x test-ocr-complete.sh
 ./test-ocr-complete.sh /path/to/your/image.jpg
 
 # Or test against remote API
-./test-ocr-complete.sh /path/to/image.jpg http://192.168.1.100:3000
+./test-ocr-complete.sh /path/to/image.jpg http://192.168.1.100:8600
 ```
 
 ### Manual Testing Steps
@@ -618,7 +618,7 @@ chmod +x test-ocr-complete.sh
 #### 1. Basic Status Check
 ```bash
 # Check service status
-curl http://localhost:3000/ocr/status
+curl http://localhost:8600/ocr/status
 
 # Expected response:
 {
@@ -633,7 +633,7 @@ curl http://localhost:3000/ocr/status
 # Test with an image file
 curl -X POST \
   -F "image=@/path/to/your/image.jpg" \
-  http://localhost:3000/ocr/process
+  http://localhost:8600/ocr/process
 
 # Expected response:
 {
@@ -651,14 +651,14 @@ curl -X POST \
 node test-sse-client.js abc-123-def-456
 
 # Or specify different API URL
-node test-sse-client.js abc-123-def-456 http://192.168.1.100:3000
+node test-sse-client.js abc-123-def-456 http://192.168.1.100:8600
 ```
 
 **Option B: Using curl (Basic)**
 ```bash
 # Monitor progress with curl
 curl -N -H "Accept: text/event-stream" \
-  http://localhost:3000/ocr/progress/abc-123-def-456
+  http://localhost:8600/ocr/progress/abc-123-def-456
 ```
 
 ### SSE Test Client Features
@@ -672,7 +672,7 @@ The Node.js SSE client (`test-sse-client.js`) provides:
 
 Example output:
 ```
-🔗 Connecting to SSE stream: http://localhost:3000/ocr/progress/abc-123
+🔗 Connecting to SSE stream: http://localhost:8600/ocr/progress/abc-123
 📡 Listening for progress updates...
 
 [2024-01-20T10:30:15.123Z] Event #1
@@ -773,23 +773,23 @@ chmod 700 ~/testing
 
 ### Local Access
 
-- Service runs on port 3000
-- Access via: `http://localhost:3000` or `http://raspberry-pi-ip:3000`
+- Service runs on port 8600
+- Access via: `http://localhost:8600` or `http://raspberry-pi-ip:8600`
 
 ### Firewall Configuration (Shared Machine Considerations)
 
 ```bash
-# Check if port 3000 is available (avoid conflicts)
-netstat -tuln | grep :3000
+# Check if port 8600 is available (avoid conflicts)
+netstat -tuln | grep :8600
 
 # If port is in use, modify docker-compose.prod.yml to use different port
-# Example: change "3000:3000" to "3001:3000"
+# Example: change "8600:8600" to "8601:8600"
 
 # For firewall (ask system administrator on shared machines)
 # sudo ufw allow 3000  # Only if you have admin rights
 
 # Alternative: Use SSH tunneling for remote access
-ssh -L 3000:localhost:3000 user@raspberry-pi-ip
+ssh -L 8600:localhost:8600 user@raspberry-pi-ip
 ```
 
 ## Test Environment Notes
@@ -818,7 +818,7 @@ ssh -L 3000:localhost:3000 user@raspberry-pi-ip
 #### Conflict Avoidance
 ```bash
 # Check for port conflicts before starting
-netstat -tuln | grep :3000
+netstat -tuln | grep :8600
 
 # Check system resources before testing
 free -h

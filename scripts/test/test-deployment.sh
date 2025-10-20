@@ -5,7 +5,7 @@
 
 set -e
 
-API_URL="http://localhost:3000"
+API_URL="http://localhost:8600"
 TEST_IMAGE_URL="https://via.placeholder.com/800x200/000000/FFFFFF?text=Test+OCR+Image"
 
 # Colors

@@ -6,7 +6,7 @@
 
 set -e
 
-API_URL="${1:-http://localhost:3000}"
+API_URL="${1:-http://localhost:8600}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FAILED_TESTS=0
 TOTAL_TESTS=0

@@ -7,7 +7,7 @@ The Tesseract-API provides RESTful endpoints for OCR processing with real-time p
 ## Base URL
 
 ```
-http://localhost:3000
+http://localhost:8600
 ```
 
 ## Authentication
@@ -308,7 +308,7 @@ async function processImage(imagePath) {
   const form = new FormData();
   form.append('image', fs.createReadStream(imagePath));
   
-  const response = await fetch('http://localhost:3000/ocr/process', {
+  const response = await fetch('http://localhost:8600/ocr/process', {
     method: 'POST',
     body: form
   });
@@ -325,7 +325,7 @@ async function processImage(imagePath) {
 const EventSource = require('eventsource');
 
 function monitorProgress(jobId) {
-  const eventSource = new EventSource(`http://localhost:3000/ocr/progress/${jobId}`);
+  const eventSource = new EventSource(`http://localhost:8600/ocr/progress/${jobId}`);
   
   eventSource.onmessage = function(event) {
     const data = JSON.parse(event.data);
@@ -359,18 +359,18 @@ function monitorProgress(jobId) {
 ```bash
 curl -X POST \
   -F "image=@/path/to/image.jpg" \
-  http://localhost:3000/ocr/process
+  http://localhost:8600/ocr/process
 ```
 
 #### Monitor Progress
 ```bash
 curl -N -H "Accept: text/event-stream" \
-  http://localhost:3000/ocr/progress/550e8400-e29b-41d4-a716-446655440000
+  http://localhost:8600/ocr/progress/550e8400-e29b-41d4-a716-446655440000
 ```
 
 #### Check Status
 ```bash
-curl http://localhost:3000/ocr/status
+curl http://localhost:8600/ocr/status
 ```
 
 ### Python Example
@@ -383,7 +383,7 @@ def process_image_with_progress(image_path):
     # Submit OCR request
     with open(image_path, 'rb') as f:
         files = {'image': f}
-        response = requests.post('http://localhost:3000/ocr/process', files=files)
+        response = requests.post('http://localhost:8600/ocr/process', files=files)
     
     if response.status_code == 200:
         job_data = response.json()
@@ -391,7 +391,7 @@ def process_image_with_progress(image_path):
         print(f"Job started: {job_id}")
         
         # Monitor progress
-        progress_url = f"http://localhost:3000/ocr/progress/{job_id}"
+        progress_url = f"http://localhost:8600/ocr/progress/{job_id}"
         messages = sseclient.SSEClient(progress_url)
         
         for msg in messages:

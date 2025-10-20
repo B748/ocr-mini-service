@@ -58,11 +58,11 @@ RUN mkdir -p /tmp/tesseract-api && \
 USER tesseract
 
 # Expose port
-EXPOSE 3000
+EXPOSE 8600
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ocr/status || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8600/ocr/status || exit 1
 
 # Set entrypoint
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]

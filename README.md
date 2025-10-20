@@ -21,7 +21,7 @@ cd docker
 docker-compose up --build
 ```
 
-The API will be available at `http://localhost:3000`
+The API will be available at `http://localhost:8600`
 
 ## Project Structure
 
@@ -59,10 +59,10 @@ The API will be available at `http://localhost:3000`
 ### Example Usage
 ```bash
 # Submit OCR request
-curl -X POST -F "image=@image.jpg" http://localhost:3000/ocr/process
+curl -X POST -F "image=@image.jpg" http://localhost:8600/ocr/process
 
 # Monitor progress
-curl -N -H "Accept: text/event-stream" http://localhost:3000/ocr/progress/{jobId}
+curl -N -H "Accept: text/event-stream" http://localhost:8600/ocr/progress/{jobId}
 ```
 
 ## Development

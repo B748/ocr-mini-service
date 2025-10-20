@@ -96,7 +96,7 @@ docker build -f docker/Dockerfile -t tesseract-api:latest .
 # Run container
 docker run -d \
   --name tesseract-api \
-  -p 3000:3000 \
+  -p 8600:8600 \
   --restart unless-stopped \
   tesseract-api:latest
 ```
@@ -109,7 +109,7 @@ docker build -f docker/Dockerfile.pi -t tesseract-api:pi .
 # Run with resource limits
 docker run -d \
   --name tesseract-api \
-  -p 3000:3000 \
+  -p 8600:8600 \
   --memory=512m \
   --cpus=1.0 \
   --restart unless-stopped \
@@ -199,7 +199,7 @@ docker push your-registry/tesseract-api:latest
 
 # Deploy on target machine
 docker pull your-registry/tesseract-api:latest
-docker run -d --name tesseract-api -p 3000:3000 your-registry/tesseract-api:latest
+docker run -d --name tesseract-api -p 8600:8600 your-registry/tesseract-api:latest
 ```
 
 #### Container Orchestration
@@ -260,7 +260,7 @@ services:
   tesseract-api:
     image: your-registry/tesseract-api:latest
     ports:
-      - "3000:3000"
+      - "8600:8600"
     deploy:
       replicas: 2
       resources:
@@ -275,7 +275,7 @@ services:
         delay: 5s
         max_attempts: 3
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/ocr/status"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8600/ocr/status"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -301,7 +301,7 @@ docker run -d \
   -e NODE_ENV=production \
   -e TESSERACT_TEMP_DIR=/tmp/tesseract-api \
   -e NODE_OPTIONS="--max-old-space-size=512" \
-  -p 3000:3000 \
+  -p 8600:8600 \
   tesseract-api:latest
 ```
 
@@ -369,14 +369,14 @@ The Docker images include comprehensive health checks:
 
 ```dockerfile
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ocr/status || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8600/ocr/status || exit 1
 ```
 
 ### Manual Health Verification
 
 #### Service Status Check
 ```bash
-curl http://localhost:3000/ocr/status
+curl http://localhost:8600/ocr/status
 
 # Expected response:
 {
@@ -388,7 +388,7 @@ curl http://localhost:3000/ocr/status
 
 #### Debug Information
 ```bash
-curl http://localhost:3000/ocr/debug
+curl http://localhost:8600/ocr/debug
 
 # Returns system information including:
 # - Tesseract version and available languages
@@ -441,7 +441,7 @@ docker run -d \
   --tmpfs /var/tmp \
   --cap-drop ALL \
   --security-opt no-new-privileges:true \
-  -p 127.0.0.1:3000:3000 \
+  -p 127.0.0.1:8600:8600 \
   tesseract-api:latest
 ```
 
@@ -457,7 +457,7 @@ docker run -d \
   tesseract-api:latest
 
 # Expose only to localhost
-docker run -d -p 127.0.0.1:3000:3000 tesseract-api:latest
+docker run -d -p 127.0.0.1:8600:8600 tesseract-api:latest
 ```
 
 ### Resource Limits and Protection
@@ -523,9 +523,9 @@ docker-compose -f docker-compose.prod.yml up -d --scale tesseract-api=3
 #### Manual Instance Management
 ```bash
 # Run multiple instances on different ports
-docker run -d -p 3001:3000 --name tesseract-api-1 tesseract-api:latest
-docker run -d -p 3002:3000 --name tesseract-api-2 tesseract-api:latest
-docker run -d -p 3003:3000 --name tesseract-api-3 tesseract-api:latest
+docker run -d -p 8601:8600 --name tesseract-api-1 tesseract-api:latest
+docker run -d -p 8602:8600 --name tesseract-api-2 tesseract-api:latest
+docker run -d -p 8603:8600 --name tesseract-api-3 tesseract-api:latest
 ```
 
 ### Load Balancer Configuration
@@ -705,7 +705,7 @@ cd scripts/deploy
 #### OCR Processing Fails
 ```bash
 # Check debug information
-curl http://localhost:3000/ocr/debug
+curl http://localhost:8600/ocr/debug
 
 # Verify Tesseract installation
 docker exec tesseract-api tesseract --version
@@ -714,7 +714,7 @@ docker exec tesseract-api tesseract --version
 docker exec tesseract-api tesseract --list-langs
 
 # Test with simple image
-curl -X POST -F "image=@simple-text.png" http://localhost:3000/ocr/process
+curl -X POST -F "image=@simple-text.png" http://localhost:8600/ocr/process
 ```
 
 #### Performance Issues
@@ -749,7 +749,7 @@ docker exec tesseract-api ps aux
 netstat -tuln | grep 3000
 
 # Test network connectivity
-curl -v http://localhost:3000/ocr/status
+curl -v http://localhost:8600/ocr/status
 
 # Check firewall settings
 sudo ufw status
@@ -900,7 +900,7 @@ npm update
 # Simple health check script
 #!/bin/bash
 # save as monitor-tesseract.sh
-if ! curl -f http://localhost:3000/ocr/status > /dev/null 2>&1; then
+if ! curl -f http://localhost:8600/ocr/status > /dev/null 2>&1; then
     echo "ALERT: Tesseract-API is not responding"
     # Add notification logic here (email, Slack, etc.)
 fi
@@ -920,7 +920,7 @@ For additional support:
 2. **Run diagnostic tests**: `scripts/test/test-deployment.sh`
 3. **Check logs**: `docker logs tesseract-api`
 4. **Review system resources**: `docker stats tesseract-api`
-5. **Verify configuration**: `curl http://localhost:3000/ocr/debug`
+5. **Verify configuration**: `curl http://localhost:8600/ocr/debug`
 
 ### Contributing to Documentation
 

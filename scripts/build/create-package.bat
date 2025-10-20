@@ -98,9 +98,9 @@ echo    ./deploy.sh status
 echo    ```
 echo.
 echo ## Service URLs:
-echo - Status: http://localhost:3000/ocr/status
-echo - Debug: http://localhost:3000/ocr/debug
-echo - API: http://localhost:3000/ocr/process
+echo - Status: http://localhost:8600/ocr/status
+echo - Debug: http://localhost:8600/ocr/debug
+echo - API: http://localhost:8600/ocr/process
 echo.
 echo ## Management Commands:
 echo - View logs: `./deploy.sh logs`

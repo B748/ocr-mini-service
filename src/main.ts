@@ -10,10 +10,10 @@ async function bootstrap() {
     credentials: true,
   });
 
-  const port = process.env.PORT || 3000;
+  const port = process.env.PORT || 8600;
   await app.listen(port);
   
   console.log(`Tesseract-API running on port ${port}`);
 }
 
-bootstrap();
+void bootstrap();

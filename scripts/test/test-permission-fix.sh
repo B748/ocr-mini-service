@@ -62,7 +62,7 @@ echo ""
 
 # Step 2: Run container
 log "2. Starting container for permission testing..."
-if docker run -d --name "$CONTAINER_NAME" -p 3001:3000 "$IMAGE_NAME"; then
+if docker run -d --name "$CONTAINER_NAME" -p 8601:8600 "$IMAGE_NAME"; then
     log "✅ Container started successfully"
 else
     error "❌ Failed to start container"
