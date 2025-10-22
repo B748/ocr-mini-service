@@ -73,14 +73,8 @@ export class OcrController {
   async processBuffer(@Req() req: Request) {
     const chunks: Buffer[] = [];
 
-    if (req.body) {
-      const reader = req.body.getReader();
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(Buffer.from(value));
-      }
+    for await (const chunk of req as any) {
+      chunks.push(chunk as Buffer);
     }
 
     const completeBuffer = Buffer.concat(chunks);
@@ -89,7 +83,6 @@ export class OcrController {
       throw new BadRequestException('Empty body');
     }
 
-    // optional: validate size or type manually
     if (completeBuffer.length > 10 * 1024 * 1024) {
       throw new BadRequestException('File too large');
     }
@@ -98,7 +91,7 @@ export class OcrController {
 
     return {
       jobId,
-      message: 'OCR processing started (buffer mode)',
+      message: 'OCR processing started (buffer mode). Get Result via /ocr/progress/{jobId}',
     };
   }
 }
