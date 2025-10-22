@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Subject } from 'rxjs';
 import { TesseractService } from './tesseract.service';
 import { nanoid } from '../types/nanoid.function';
@@ -9,6 +9,7 @@ interface MessageEvent {
 
 @Injectable()
 export class OcrService {
+  private readonly _logger = new Logger(OcrService.name);
   private _processing = false;
 
   constructor(private readonly tesseractService: TesseractService) {}
@@ -18,6 +19,7 @@ export class OcrService {
   }
 
   async startOcrProcess(file: any): Promise<string> {
+    this._logger.debug('Starting OCR process...');
     const jobId = nanoid();
     const progressSubject = new Subject<MessageEvent>();
 
@@ -26,6 +28,7 @@ export class OcrService {
     // Start OCR processing in background
     void this._processOcrAsync(jobId, file, progressSubject);
 
+    this._logger.debug(`OCR-job created: ${jobId}`);
     return jobId;
   }
 
@@ -42,12 +45,16 @@ export class OcrService {
       // PROCESS IMAGE WITH TESSERACT
       const result = await this.tesseractService.processImage(file.buffer);
 
+      this._logger.debug(`OCR-job done: ${jobId}`);
+
       // SEND COMPLETION
       this._sendSse(progressSubject, {
         type: 'complete',
         result,
       });
     } catch (error) {
+      this._logger.error(`OCR-job failed: ${jobId}`);
+
       this._sendSse(progressSubject, {
         type: 'error',
         error: error.message || 'OCR processing failed',
