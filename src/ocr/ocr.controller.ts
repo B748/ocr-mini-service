@@ -8,19 +8,30 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { VersionService } from '../common/version.service';
 import { OcrService } from './ocr.service';
 
 @Controller('ocr')
 export class OcrController {
-  constructor(private readonly _ocrService: OcrService) {}
+  constructor(
+    private readonly _ocrService: OcrService,
+    private readonly _versionService: VersionService,
+  ) {}
 
   @Get('status')
   getStatus() {
     return {
       service: 'tesseract-api',
+      version: this._versionService.getVersion(),
       status: 'ready',
       processing: this._ocrService.isProcessing(),
+      runtime: this._versionService.getRuntimeInfo(),
     };
+  }
+
+  @Get('version')
+  getVersion() {
+    return this._versionService.getRuntimeInfo();
   }
 
   @Get('debug')
