@@ -2,14 +2,12 @@ import {
   BadRequestException,
   Controller,
   Get,
-  Param,
   Post,
-  Sse,
+  Req,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { Observable } from 'rxjs';
 import { OcrService } from './ocr.service';
 
 @Controller('ocr')
@@ -60,8 +58,36 @@ export class OcrController {
     };
   }
 
-  @Sse('progress/:jobId')
-  getProgress(@Param('jobId') jobId: string): Observable<any> {
-    return this._ocrService.getProgressStream(jobId);
+  @Post('process-buffer')
+  async processBuffer(@Req() req: Request) {
+    const chunks: Buffer[] = [];
+
+    if (req.body) {
+      const reader = req.body.getReader();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(Buffer.from(value));
+      }
+    }
+
+    const completeBuffer = Buffer.concat(chunks);
+
+    if (completeBuffer.length === 0) {
+      throw new BadRequestException('Empty body');
+    }
+
+    // optional: validate size or type manually
+    if (completeBuffer.length > 10 * 1024 * 1024) {
+      throw new BadRequestException('File too large');
+    }
+
+    const jobId = await this._ocrService.startOcrProcess(completeBuffer);
+
+    return {
+      jobId,
+      message: 'OCR processing started (buffer mode)',
+    };
   }
 }
