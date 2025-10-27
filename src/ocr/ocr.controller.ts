@@ -11,6 +11,8 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { VersionService } from '../common/version.service';
 import { OcrService } from './ocr.service';
+import { Express } from 'express';
+import 'multer';
 
 @Controller('ocr')
 export class OcrController {
@@ -44,7 +46,7 @@ export class OcrController {
 
   @Post('process')
   @UseInterceptors(FileInterceptor('image'))
-  async processImage(@UploadedFile() file: any) {
+  async processImage(@UploadedFile() file: Express.Multer.File) {
     if (!file) {
       throw new BadRequestException('No image file provided');
     }
