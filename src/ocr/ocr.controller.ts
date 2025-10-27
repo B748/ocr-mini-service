@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Controller,
   Get,
+  Logger,
   Post,
   Req,
   UploadedFile,
@@ -13,6 +14,8 @@ import { OcrService } from './ocr.service';
 
 @Controller('ocr')
 export class OcrController {
+  private _logger = new Logger(OcrController.name);
+
   constructor(
     private readonly _ocrService: OcrService,
     private readonly _versionService: VersionService,
@@ -71,17 +74,21 @@ export class OcrController {
 
   @Post('process-buffer')
   async processBuffer(@Req() req: Request) {
+    this._logger.debug('Processing buffer request...');
+
     const buffer = (req as any).rawBody as Buffer;
 
     if (!buffer || buffer.length === 0) {
+      this._logger.error('No Data in buffer');
       throw new BadRequestException('Empty body');
     }
 
     if (buffer.length > 10 * 1024 * 1024) {
+      this._logger.error('Buffer exceeds 10MB');
       throw new BadRequestException('File too large');
     }
 
-    const jobId = await this._ocrService.startOcrProcess(buffer);
+    this._logger.debug('Starting OCR process...');
 
     return {
       jobId,
