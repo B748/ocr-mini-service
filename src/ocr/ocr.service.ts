@@ -18,7 +18,7 @@ export class OcrService {
     return this._processing;
   }
 
-  async startOcrProcess(file: any): Promise<string> {
+  async startOcrProcessOnBuffer(buffer: Buffer): Promise<string> {
     this._logger.debug('Starting OCR process...');
     const jobId = nanoid();
     const progressSubject = new Subject<MessageEvent>();
@@ -26,7 +26,7 @@ export class OcrService {
     this._processing = true;
 
     // Start OCR processing in background
-    void this._processOcrAsync(jobId, file, progressSubject);
+    void this._processOcrAsync(jobId, buffer, progressSubject);
 
     this._logger.debug(`OCR-job created: ${jobId}`);
     return jobId;
@@ -38,12 +38,12 @@ export class OcrService {
 
   private async _processOcrAsync(
     jobId: string,
-    file: any,
+    buffer: Buffer,
     progressSubject: Subject<MessageEvent>,
   ) {
     try {
       // PROCESS IMAGE WITH TESSERACT
-      const result = await this.tesseractService.processImage(file.buffer);
+      const result = await this.tesseractService.processImage(buffer);
 
       this._logger.debug(`OCR-job done: ${jobId}`);
 

@@ -65,7 +65,7 @@ export class OcrController {
       );
     }
 
-    const jobId = await this._ocrService.startOcrProcess(file);
+    const jobId = await this._ocrService.startOcrProcessOnBuffer(file.buffer);
 
     return {
       jobId,
@@ -91,6 +91,7 @@ export class OcrController {
     }
 
     this._logger.debug('Starting OCR process...');
+    const jobId = await this._ocrService.startOcrProcessOnBuffer(buffer);
 
     return {
       jobId,
