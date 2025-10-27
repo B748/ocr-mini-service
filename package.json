@@ -1,6 +1,6 @@
 {
   "name": "tesseract-api",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "OCR Microservice using Tesseract",
   "main": "dist/main.js",
   "scripts": {
