@@ -1,5 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Subject } from 'rxjs';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Observable, Subject } from 'rxjs';
 import { TesseractService } from './tesseract.service';
 import { nanoid } from '../types/nanoid.function';
 
@@ -11,6 +11,7 @@ interface MessageEvent {
 export class OcrService {
   private readonly _logger = new Logger(OcrService.name);
   private _processing = false;
+  private _progressStreams = new Map<string, Subject<MessageEvent>>();
 
   constructor(private readonly tesseractService: TesseractService) {}
 
@@ -22,6 +23,7 @@ export class OcrService {
     this._logger.debug('Starting OCR process...');
     const jobId = nanoid();
     const progressSubject = new Subject<MessageEvent>();
+    this._progressStreams.set(jobId, progressSubject);
 
     this._processing = true;
 
@@ -67,5 +69,13 @@ export class OcrService {
 
   private _sendSse(progressSubject: Subject<MessageEvent>, data: unknown) {
     progressSubject.next({ data: JSON.stringify(data) });
+  }
+
+  getProgressStream(jobId: string): Observable<MessageEvent> {
+    const stream = this._progressStreams.get(jobId);
+    if (!stream) {
+      throw new NotFoundException(`Job ${jobId} not found`);
+    }
+    return stream.asObservable();
   }
 }

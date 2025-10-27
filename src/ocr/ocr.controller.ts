@@ -3,8 +3,10 @@ import {
   Controller,
   Get,
   Logger,
+  Param,
   Post,
   Req,
+  Sse,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
@@ -14,6 +16,7 @@ import { OcrService } from './ocr.service';
 import { Express } from 'express';
 import 'multer';
 import { Readable } from 'node:stream';
+import { Observable } from 'rxjs';
 
 @Controller('ocr')
 export class OcrController {
@@ -87,7 +90,7 @@ export class OcrController {
 
     const buffer = Buffer.concat(chunks);
 
-    this._logger.debug('Received buffer with length:', buffer.length);
+    this._logger.debug(`Received buffer with length: ${buffer.length}`);
 
     if (!buffer || buffer.length === 0) {
       this._logger.error('No Data in buffer');
@@ -99,12 +102,16 @@ export class OcrController {
       throw new BadRequestException('File too large');
     }
 
-    this._logger.debug('Starting OCR process...');
     const jobId = await this._ocrService.startOcrProcessOnBuffer(buffer);
 
     return {
       jobId,
       message: `OCR processing started (buffer mode). Get Result via /ocr/progress/${jobId}`,
     };
+  }
+
+  @Sse('progress/:jobId')
+  getProgress(@Param('jobId') jobId: string): Observable<any> {
+    return this._ocrService.getProgressStream(jobId);
   }
 }
