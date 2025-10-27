@@ -13,6 +13,7 @@ import { VersionService } from '../common/version.service';
 import { OcrService } from './ocr.service';
 import { Express } from 'express';
 import 'multer';
+import { Readable } from 'node:stream';
 
 @Controller('ocr')
 export class OcrController {
@@ -78,7 +79,15 @@ export class OcrController {
   async processBuffer(@Req() req: Request) {
     this._logger.debug('Processing buffer request...');
 
-    const buffer = (req as any).rawBody as Buffer;
+    const stream = req as unknown as Readable;
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) {
+      chunks.push(chunk as Buffer);
+    }
+
+    const buffer = Buffer.concat(chunks);
+
+    this._logger.debug('Received buffer with length:', buffer.length);
 
     if (!buffer || buffer.length === 0) {
       this._logger.error('No Data in buffer');
