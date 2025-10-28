@@ -72,10 +72,10 @@ export class OcrService {
   }
 
   getProgressStream(jobId: string): Observable<MessageEvent> {
-    const stream = this._progressStreams.get(jobId);
-    if (!stream) {
+    const progressSubject = this._progressStreams.get(jobId);
+    if (!progressSubject) {
       throw new NotFoundException(`Job ${jobId} not found`);
     }
-    return stream.asObservable();
+    return progressSubject.asObservable();
   }
 }

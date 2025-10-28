@@ -112,6 +112,7 @@ export class OcrController {
 
   @Sse('progress/:jobId')
   getProgress(@Param('jobId') jobId: string): Observable<any> {
+    this._logger.debug(`SSE request for job ${jobId}`);
     return this._ocrService.getProgressStream(jobId);
   }
 }
