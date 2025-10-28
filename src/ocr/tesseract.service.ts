@@ -16,11 +16,15 @@ export class TesseractService {
     void this._ensureTempDir();
   }
 
+  /**
+   * Gets comprehensive debug information about the Tesseract service
+   * @returns Debug information including temp directory, process info, Tesseract version, and system details
+   */
   async getDebugInfo() {
     const { promises: fs } = require('fs');
 
     try {
-      // Check temp directory
+      // CHECK TEMP DIRECTORY
       const tempDirExists = await fs
         .access(this._tempDir)
         .then(() => true)
@@ -34,7 +38,7 @@ export class TesseractService {
           tempDirContents = await fs.readdir(this._tempDir);
           tempDirStats = await fs.stat(this._tempDir);
 
-          // Test write permissions
+          // TEST WRITE PERMISSIONS
           const testFile = join(this._tempDir, 'debug-write-test');
           try {
             await fs.writeFile(testFile, 'test');
@@ -48,10 +52,10 @@ export class TesseractService {
         }
       }
 
-      // Check Tesseract version
+      // CHECK TESSERACT VERSION
       const tesseractVersion = await this._getTesseractVersion();
 
-      // Check available languages
+      // CHECK AVAILABLE LANGUAGES
       const availableLanguages = await this._getAvailableLanguages();
 
       return {
@@ -87,12 +91,16 @@ export class TesseractService {
     }
   }
 
+  /**
+   * Ensures the temporary directory exists and is writable
+   * @private
+   */
   private async _ensureTempDir() {
     try {
-      // Try to create the directory
+      // TRY TO CREATE THE DIRECTORY
       await fs.mkdir(this._tempDir, { recursive: true });
 
-      // Test write permissions by creating a test file
+      // TEST WRITE PERMISSIONS BY CREATING A TEST FILE
       const testFile = join(this._tempDir, 'test-write-permissions');
       await fs.writeFile(testFile, 'test');
       await fs.unlink(testFile);
@@ -104,7 +112,7 @@ export class TesseractService {
         error,
       );
 
-      // Try alternative temp directories
+      // TRY ALTERNATIVE TEMP DIRECTORIES
       const alternatives = [
         '/tmp/ocr-temp',
         '/var/tmp/tesseract-api',
@@ -119,7 +127,7 @@ export class TesseractService {
           await fs.unlink(testFile);
 
           this._logger.warn(`Using alternative temp directory: ${altDir}`);
-          (this as any)._tempDir = altDir; // Update the temp directory
+          (this as any)._tempDir = altDir; // UPDATE THE TEMP DIRECTORY
           return;
         } catch (altError) {
           this._logger.debug(
@@ -135,6 +143,12 @@ export class TesseractService {
     }
   }
 
+  /**
+   * Processes an image buffer using Tesseract OCR
+   * @param imageBuffer - The image data to process
+   * @returns Promise resolving to array of OCR results with text and bounding boxes
+   * @throws {Error} When image buffer is invalid or OCR processing fails
+   */
   async processImage(
     imageBuffer: Buffer,
   ): Promise<DimensionData<TextContent>[]> {
@@ -207,7 +221,7 @@ export class TesseractService {
       this._logger.error(`OCR processing failed for job ${jobId}:`, error);
       throw error;
     } finally {
-      // Clean up only files that were actually created
+      // CLEAN UP ONLY FILES THAT WERE ACTUALLY CREATED
       if (createdFiles.length > 0) {
         await this._cleanupFiles(createdFiles);
       } else {
@@ -216,13 +230,21 @@ export class TesseractService {
     }
   }
 
+  /**
+   * Runs Tesseract OCR process on an input image file
+   * @param inputPath - Path to the input image file
+   * @param outputBasePath - Base path for output files (without extension)
+   * @returns Promise that resolves when Tesseract processing completes
+   * @throws {Error} When Tesseract process fails
+   * @private
+   */
   private async _runTesseract(
     inputPath: string,
     outputBasePath: string,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
-      // Use TSV output format for detailed word-level information
-      // -l deu+eng for German and English
+      // USE TSV OUTPUT FORMAT FOR DETAILED WORD-LEVEL INFORMATION
+      // -L DEU+ENG FOR GERMAN AND ENGLISH
       const args = [inputPath, outputBasePath, '-l', 'deu+eng', 'tsv'];
 
       this._logger.debug(`Running Tesseract with args: ${args.join(' ')}`);
@@ -240,7 +262,7 @@ export class TesseractService {
         const chunk = data.toString();
         stderr += chunk;
 
-        // Log Tesseract output for debugging
+        // LOG TESSERACT OUTPUT FOR DEBUGGING
         this._logger.debug(`Tesseract stderr: ${chunk.trim()}`);
       });
 
@@ -265,6 +287,13 @@ export class TesseractService {
     });
   }
 
+  /**
+   * Parses Tesseract TSV output file into structured OCR data
+   * @param tsvPath - Path to the TSV output file from Tesseract
+   * @returns Promise resolving to array of OCR results with text and bounding boxes
+   * @throws {Error} When TSV file cannot be read or parsed
+   * @private
+   */
   private async _parseTsvOutput(
     tsvPath: string,
   ): Promise<DimensionData<TextContent>[]> {
@@ -297,10 +326,15 @@ export class TesseractService {
     }
   }
 
+  /**
+   * Cleans up temporary files created during OCR processing
+   * @param filePaths - Array of file paths to delete
+   * @private
+   */
   private async _cleanupFiles(filePaths: string[]) {
     for (const filePath of filePaths) {
       try {
-        // Check if file exists before trying to delete
+        // CHECK IF FILE EXISTS BEFORE TRYING TO DELETE
         await fs.access(filePath);
         await fs.unlink(filePath);
         this._logger.debug(`Successfully cleaned up file: ${filePath}`);
@@ -318,6 +352,11 @@ export class TesseractService {
     }
   }
 
+  /**
+   * Gets the Tesseract version information
+   * @returns Promise resolving to version string
+   * @private
+   */
   private async _getTesseractVersion(): Promise<string> {
     return new Promise((resolve) => {
       const tesseract = spawn('tesseract', ['--version']);
@@ -341,6 +380,11 @@ export class TesseractService {
     });
   }
 
+  /**
+   * Gets the list of available Tesseract languages
+   * @returns Promise resolving to array of language codes
+   * @private
+   */
   private async _getAvailableLanguages(): Promise<string[]> {
     return new Promise((resolve) => {
       const tesseract = spawn('tesseract', ['--list-langs']);
@@ -352,7 +396,7 @@ export class TesseractService {
 
       tesseract.on('close', () => {
         const lines = output.trim().split('\n');
-        // Skip the first line which is usually "List of available languages (X):"
+        // SKIP THE FIRST LINE WHICH IS USUALLY "List of available languages (X):"
         const languages = lines.slice(1).filter((line) => line.trim());
         resolve(languages);
       });
@@ -363,6 +407,68 @@ export class TesseractService {
     });
   }
 
+  /**
+   * Dummy OCR processing function that simulates OCR processing
+   * Pauses for 7 seconds then returns a successful mock result
+   */
+  async ocr_processing(imageBuffer: Buffer): Promise<DimensionData<TextContent>[]> {
+    this._logger.debug('Starting dummy OCR processing...');
+    
+    // VALIDATE INPUT
+    if (!imageBuffer || imageBuffer.length === 0) {
+      throw new Error('Invalid image buffer provided');
+    }
+
+    // SIMULATE 7-SECOND PROCESSING TIME
+    await new Promise(resolve => setTimeout(resolve, 7000));
+
+    // RETURN MOCK SUCCESSFUL OCR RESULT
+    const mockResult: DimensionData<TextContent>[] = [
+      {
+        left: 100,
+        top: 50,
+        width: 200,
+        height: 30,
+        data: {
+          id: nanoid(),
+          text: 'Sample',
+          confidence: 95
+        }
+      },
+      {
+        left: 320,
+        top: 50,
+        width: 150,
+        height: 30,
+        data: {
+          id: nanoid(),
+          text: 'OCR',
+          confidence: 98
+        }
+      },
+      {
+        left: 490,
+        top: 50,
+        width: 180,
+        height: 30,
+        data: {
+          id: nanoid(),
+          text: 'Result',
+          confidence: 92
+        }
+      }
+    ];
+
+    this._logger.debug('Dummy OCR processing completed successfully');
+    return mockResult;
+  }
+
+  /**
+   * Checks if Tesseract OCR is available and properly installed
+   * @returns Promise that resolves if Tesseract is available
+   * @throws {Error} When Tesseract is not available or not properly installed
+   * @private
+   */
   private async _checkTesseractAvailability(): Promise<void> {
     return new Promise((resolve, reject) => {
       const tesseract = spawn('tesseract', ['--version']);

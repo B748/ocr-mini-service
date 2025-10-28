@@ -43,7 +43,7 @@ Check service status and availability.
 
 ### POST /ocr/process
 
-Submit an image for OCR processing.
+Submit an image for OCR processing with configurable return strategy.
 
 **Request:**
 ```http
@@ -51,17 +51,43 @@ POST /ocr/process
 Content-Type: multipart/form-data
 
 image: [file]
+returnStrategy: [sse|webhook|polling]
+webhookUrl: [url] (required for webhook strategy)
 ```
 
 **Parameters:**
 - `image` (file, required) - Image file (JPEG/PNG, max 10MB)
+- `returnStrategy` (query, optional) - Return strategy: `sse` (default), `webhook`, or `polling`
+- `webhookUrl` (query, optional) - Webhook URL (required when returnStrategy=webhook)
+- `callbackHeaders` (body, optional) - JSON object with custom headers for webhook requests
 
-**Response:**
+**Response (SSE strategy):**
 ```json
 {
   "jobId": "550e8400-e29b-41d4-a716-446655440000",
   "message": "OCR processing started",
+  "returnStrategy": "sse",
   "progressUrl": "/ocr/progress/550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+**Response (Webhook strategy):**
+```json
+{
+  "jobId": "550e8400-e29b-41d4-a716-446655440000",
+  "message": "OCR processing started",
+  "returnStrategy": "webhook",
+  "webhookUrl": "https://your-app.com/webhook"
+}
+```
+
+**Response (Polling strategy):**
+```json
+{
+  "jobId": "550e8400-e29b-41d4-a716-446655440000",
+  "message": "OCR processing started",
+  "returnStrategy": "polling",
+  "statusUrl": "/ocr/status/550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 
@@ -141,6 +167,78 @@ data: {"type":"complete","progress":100,"message":"OCR processing completed","re
 **Status Codes:**
 - `200` - SSE stream established
 - `404` - Job not found
+
+---
+
+### GET /ocr/status/{jobId}
+
+Get the current status of an OCR job (for polling strategy).
+
+**Request:**
+```http
+GET /ocr/status/550e8400-e29b-41d4-a716-446655440000
+```
+
+**Response (Processing):**
+```json
+{
+  "jobId": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "processing",
+  "createdAt": "2024-01-01T12:00:00Z"
+}
+```
+
+**Response (Completed):**
+```json
+{
+  "jobId": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "completed",
+  "result": {
+    "words": [...],
+    "lines": [...],
+    "paragraphs": [...],
+    "blocks": [...]
+  },
+  "createdAt": "2024-01-01T12:00:00Z",
+  "completedAt": "2024-01-01T12:00:05Z"
+}
+```
+
+**Response (Failed):**
+```json
+{
+  "jobId": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "failed",
+  "error": "OCR processing failed: Invalid image format",
+  "createdAt": "2024-01-01T12:00:00Z",
+  "completedAt": "2024-01-01T12:00:02Z"
+}
+```
+
+**Status Codes:**
+- `200` - Job status retrieved successfully
+- `404` - Job not found
+
+---
+
+### POST /ocr/process-buffer
+
+Submit image data as raw buffer for OCR processing with configurable return strategy.
+
+**Request:**
+```http
+POST /ocr/process-buffer?returnStrategy=webhook&webhookUrl=https://your-app.com/webhook
+Content-Type: application/octet-stream
+
+[binary image data]
+```
+
+**Parameters:**
+- `returnStrategy` (query, optional) - Return strategy: `sse` (default), `webhook`, or `polling`
+- `webhookUrl` (query, optional) - Webhook URL (required when returnStrategy=webhook)
+- `callbackHeaders` (query, optional) - JSON string with custom headers for webhook requests
+
+**Response:** Same format as `/ocr/process` endpoint based on return strategy.
 
 ---
 
@@ -295,6 +393,39 @@ interface StructureContent {
 }
 ```
 
+## Webhook Payloads
+
+When using the webhook return strategy, the service will send HTTP POST requests to your specified webhook URL with the following payloads:
+
+### Successful Completion
+```json
+{
+  "jobId": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "completed",
+  "result": {
+    "words": [...],
+    "lines": [...],
+    "paragraphs": [...],
+    "blocks": [...]
+  },
+  "timestamp": "2024-01-01T12:00:05Z"
+}
+```
+
+### Processing Failure
+```json
+{
+  "jobId": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "failed",
+  "error": "OCR processing failed: Invalid image format",
+  "timestamp": "2024-01-01T12:00:02Z"
+}
+```
+
+### Webhook Headers
+- `Content-Type: application/json`
+- Custom headers from `callbackHeaders` parameter (if provided)
+
 ## Client Examples
 
 ### JavaScript/Node.js
@@ -355,22 +486,57 @@ function monitorProgress(jobId) {
 
 ### cURL Examples
 
-#### Submit OCR Request
+#### Submit OCR Request (SSE - Default)
 ```bash
 curl -X POST \
   -F "image=@/path/to/image.jpg" \
   http://localhost:8600/ocr/process
 ```
 
-#### Monitor Progress
+#### Submit OCR Request (Webhook)
+```bash
+curl -X POST \
+  -F "image=@/path/to/image.jpg" \
+  -F "returnStrategy=webhook" \
+  -F "webhookUrl=https://your-app.com/webhook" \
+  -H "Content-Type: multipart/form-data" \
+  -d '{"callbackHeaders": {"Authorization": "Bearer token123"}}' \
+  http://localhost:8600/ocr/process
+```
+
+#### Submit OCR Request (Polling)
+```bash
+curl -X POST \
+  -F "image=@/path/to/image.jpg" \
+  -F "returnStrategy=polling" \
+  http://localhost:8600/ocr/process
+```
+
+#### Monitor Progress (SSE)
 ```bash
 curl -N -H "Accept: text/event-stream" \
   http://localhost:8600/ocr/progress/550e8400-e29b-41d4-a716-446655440000
 ```
 
-#### Check Status
+#### Check Job Status (Polling)
+```bash
+curl http://localhost:8600/ocr/status/550e8400-e29b-41d4-a716-446655440000
+```
+
+#### Check Service Status
 ```bash
 curl http://localhost:8600/ocr/status
+```
+
+#### Buffer Mode with Webhook
+```bash
+curl -X POST \
+  --data-binary @/path/to/image.jpg \
+  -H "Content-Type: application/octet-stream" \
+  -G -d "returnStrategy=webhook" \
+  -d "webhookUrl=https://your-app.com/webhook" \
+  -d 'callbackHeaders={"Authorization":"Bearer token"}' \
+  http://localhost:8600/ocr/process-buffer
 ```
 
 ### Python Example

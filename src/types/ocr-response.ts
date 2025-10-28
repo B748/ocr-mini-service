@@ -37,6 +37,12 @@ export interface TesseractTsvLineData {
   text: string;
 }
 
+/**
+ * Parses Tesseract TSV output into structured OCR data
+ * @param tsvContent - Array of TSV lines from Tesseract output
+ * @returns Promise resolving to array of word-level OCR results with normalized coordinates
+ * @throws {Error} When TSV parsing fails
+ */
 export async function parseTsvOutput(
   tsvContent: string[]
 ): Promise<DimensionData<TextContent>[]> {
@@ -46,7 +52,7 @@ export async function parseTsvOutput(
 
     const words: DimensionData<TextContent>[] = [];
 
-    // CONSIDER `dataLines.shift()` TO GET AND PROCESS PAGE LINE`
+    // CONSIDER `dataLines.shift()` TO GET AND PROCESS PAGE LINE
     const l = dataLines.find( x => x[0] === '1' ).split('\t');
     const pageSize = l && l.length === 12 ? { width: parseInt(l[8]), height: parseInt(l[9]) } : { width: 0, height: 0 };
 

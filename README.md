@@ -1,6 +1,6 @@
 # Tesseract-API
 
-OCR Microservice using Tesseract with real-time progress reporting via Server-Sent Events.
+OCR Microservice using Tesseract with flexible result delivery: Server-Sent Events, webhooks, or polling.
 
 ## Requirements
 
@@ -54,16 +54,29 @@ The API will be available at `http://localhost:8600`
 ### Core Endpoints
 - `POST /ocr/process` - Submit image for OCR processing
 - `GET /ocr/progress/{jobId}` - Monitor progress via SSE
+- `GET /ocr/status/{jobId}` - Get job status (polling)
 - `GET /ocr/status` - Check service status
+
+### Return Strategies
+- **SSE (default)**: Real-time progress via Server-Sent Events
+- **Webhook**: Results sent to your webhook URL
+- **Polling**: Client polls for results using status endpoint
 
 ### Example Usage
 ```bash
-# Submit OCR request
+# SSE (default)
 curl -X POST -F "image=@image.jpg" http://localhost:8600/ocr/process
 
-# Monitor progress
-curl -N -H "Accept: text/event-stream" http://localhost:8600/ocr/progress/{jobId}
+# Webhook
+curl -X POST -F "image=@image.jpg" -F "returnStrategy=webhook" \
+  -F "webhookUrl=https://your-app.com/webhook" http://localhost:8600/ocr/process
+
+# Polling
+curl -X POST -F "image=@image.jpg" -F "returnStrategy=polling" \
+  http://localhost:8600/ocr/process
 ```
+
+See [docs/return-strategies.md](docs/return-strategies.md) for detailed examples.
 
 ## Development
 

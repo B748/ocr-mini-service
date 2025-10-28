@@ -12,6 +12,10 @@ export class VersionService {
     this.loadPackageInfo();
   }
 
+  /**
+   * Loads package information from package.json file
+   * @private
+   */
   private loadPackageInfo() {
     try {
       const packagePath = join(process.cwd(), 'package.json');
@@ -25,10 +29,18 @@ export class VersionService {
     }
   }
 
+  /**
+   * Gets the current application version
+   * @returns The version string from package.json
+   */
   getVersion(): string {
     return this._version;
   }
 
+  /**
+   * Gets basic package information
+   * @returns Object containing name, version, and description from package.json
+   */
   getPackageInfo() {
     return {
       name: this._packageInfo.name,
@@ -37,6 +49,10 @@ export class VersionService {
     };
   }
 
+  /**
+   * Gets comprehensive runtime information including version and system details
+   * @returns Object containing version, start time, Node.js version, platform, and architecture
+   */
   getRuntimeInfo() {
     return {
       version: this._version,
