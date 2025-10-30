@@ -411,13 +411,8 @@ export class TesseractService {
    * Dummy OCR processing function that simulates OCR processing
    * Pauses for 7 seconds then returns a successful mock result
    */
-  async ocr_processing(imageBuffer: Buffer): Promise<DimensionData<TextContent>[]> {
-    this._logger.debug('Starting dummy OCR processing...');
-    
-    // VALIDATE INPUT
-    if (!imageBuffer || imageBuffer.length === 0) {
-      throw new Error('Invalid image buffer provided');
-    }
+  async dummyOcrProcessing(): Promise<DimensionData<TextContent>[]> {
+    this._logger.warn('<< !! DUMMY OCR PROCESSING !! >>');
 
     // SIMULATE 7-SECOND PROCESSING TIME
     await new Promise(resolve => setTimeout(resolve, 7000));

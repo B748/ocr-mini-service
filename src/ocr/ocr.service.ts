@@ -3,6 +3,8 @@ import { Observable, Subject } from 'rxjs';
 import { TesseractService } from './tesseract.service';
 import { nanoid } from '../types/nanoid.function';
 import { ReturnStrategy, JobStatus, WebhookPayload } from '../types/return-strategy.types';
+import { response } from 'express';
+import axios from 'axios';
 
 interface MessageEvent {
   data: string;
@@ -93,7 +95,8 @@ export class OcrService {
     
     try {
       // PROCESS IMAGE WITH TESSERACT
-      const result = await this.tesseractService.processImage(buffer);
+      // const result = await this.tesseractService.processImage(buffer);
+      const result = await this.tesseractService.dummyOcrProcessing()
 
       this._logger.debug(`OCR-job done: ${jobId}`);
 
@@ -106,7 +109,13 @@ export class OcrService {
       }
 
       // HANDLE DIFFERENT RETURN STRATEGIES
-      await this._handleCompletion(jobId, returnStrategy, result, webhookUrl, callbackHeaders, progressSubject);
+      await this._handleCompletion(jobId,
+        returnStrategy,
+        result,
+        webhookUrl,
+        callbackHeaders,
+        progressSubject
+      );
 
     } catch (error) {
       this._logger.error(`OCR-job failed: ${jobId}`, error);
@@ -195,13 +204,11 @@ export class OcrService {
           });
         }
         break;
-      
       case 'webhook':
         if (webhookUrl) {
           await this._sendWebhook(jobId, 'completed', webhookUrl, callbackHeaders, result);
         }
         break;
-      
       case 'polling':
         // STATUS IS ALREADY UPDATED IN JOB STATUS MAP
         this._logger.debug(`Job ${jobId} completed, available for polling`);
@@ -277,7 +284,7 @@ export class OcrService {
         timestamp: new Date(),
       };
 
-      const response = await fetch(webhookUrl, {
+      const response = await fetch(`${webhookUrl}/${jobId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -287,12 +294,13 @@ export class OcrService {
       });
 
       if (!response.ok) {
-        this._logger.warn(`Webhook failed for job ${jobId}: ${response.status} ${response.statusText}`);
+        this._logger.warn(`Webhook failed "${webhookUrl}/${jobId}": ${response.status} ${response.statusText}`);
       } else {
         this._logger.debug(`Webhook sent successfully for job ${jobId}`);
       }
     } catch (error) {
-      this._logger.error(`Failed to send webhook for job ${jobId}:`, error);
+      console.log(response.statusCode);
+      this._logger.error(`Webhook failed "${webhookUrl}/${jobId}":`, error);
     }
   }
 }

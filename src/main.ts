@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { Logger } from '@nestjs/common';
+import * as bodyParser from 'body-parser';
 
 /**
  * Bootstrap function that initializes and starts the NestJS application
@@ -9,6 +10,11 @@ import { Logger } from '@nestjs/common';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const logger = new Logger('Bootstrap');
+
+  // INCREASE JSON SIZE LIMIT
+  const limit = '10mb';
+  app.use(bodyParser.json({ limit }));
+  app.use(bodyParser.urlencoded({ limit, extended: true }));
 
   // ENABLE CORS FOR SSE
   app.enableCors({

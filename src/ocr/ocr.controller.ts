@@ -17,9 +17,9 @@ import { VersionService } from '../common/version.service';
 import { OcrService } from './ocr.service';
 import { Express } from 'express';
 import 'multer';
-import { Readable } from 'node:stream';
 import { Observable } from 'rxjs';
 import { ReturnStrategy } from '../types/return-strategy.types';
+import { Request } from 'express';
 
 @Controller('ocr')
 export class OcrController {
@@ -66,9 +66,7 @@ export class OcrController {
   /**
    * Processes an uploaded image file for OCR text extraction
    * @param file - The uploaded image file (JPEG/PNG, max 10MB)
-   * @param returnStrategy - How to return results: 'sse', 'webhook', or 'polling'
-   * @param webhookUrl - Required webhook URL when using webhook return strategy
-   * @param body - Optional request body containing callback headers
+   * @param body
    * @returns Job information with appropriate URLs based on return strategy
    * @throws {BadRequestException} When file is missing, invalid format, too large, or service is busy
    */
@@ -76,9 +74,7 @@ export class OcrController {
   @UseInterceptors(FileInterceptor('image'))
   async processImage(
     @UploadedFile() file: Express.Multer.File,
-    @Query('returnStrategy') returnStrategy: ReturnStrategy = 'sse',
-    @Query('webhookUrl') webhookUrl?: string,
-    @Body() body?: { callbackHeaders?: Record<string, string> },
+    @Body() body?: {body: string},
   ) {
     if (!file) {
       throw new BadRequestException('No image file provided');
@@ -98,15 +94,22 @@ export class OcrController {
       );
     }
 
+    const parsedBody: {
+      returnStrategy?: ReturnStrategy;
+      webhookUrl?: string;
+      callbackHeaders?: Record<string, string>;
+    } = JSON.parse(body.body || '{}');
+
     // VALIDATE RETURN STRATEGY
-    if (!['sse', 'webhook', 'polling'].includes(returnStrategy)) {
+    if (!['sse', 'webhook', 'polling'].includes(parsedBody.returnStrategy)) {
+      this._logger.error('Invalid return strategy: ', parsedBody);
       throw new BadRequestException(
         'Invalid return strategy. Must be: sse, webhook, or polling',
       );
     }
 
     // VALIDATE WEBHOOK REQUIREMENTS
-    if (returnStrategy === 'webhook' && !webhookUrl) {
+    if (parsedBody.returnStrategy === 'webhook' && !parsedBody.webhookUrl) {
       throw new BadRequestException(
         'webhookUrl is required when using webhook return strategy',
       );
@@ -114,19 +117,19 @@ export class OcrController {
 
     const jobId = await this._ocrService.startOcrProcessOnBuffer(
       file.buffer,
-      returnStrategy,
-      webhookUrl,
-      body?.callbackHeaders,
+      parsedBody.returnStrategy,
+      parsedBody.webhookUrl,
+      parsedBody?.callbackHeaders,
     );
 
     const response: any = {
       jobId,
       message: 'OCR processing started',
-      returnStrategy,
+      returnStrategy: parsedBody.returnStrategy,
     };
 
     // ADD APPROPRIATE URLS BASED ON RETURN STRATEGY
-    switch (returnStrategy) {
+    switch (parsedBody.returnStrategy) {
       case 'sse':
         response.progressUrl = `/ocr/progress/${jobId}`;
         break;
@@ -134,7 +137,8 @@ export class OcrController {
         response.statusUrl = `/ocr/status/${jobId}`;
         break;
       case 'webhook':
-        response.webhookUrl = webhookUrl;
+        response.webhookUrl = parsedBody.webhookUrl;
+        this._logger.debug(`Webhook URL: ${parsedBody.webhookUrl}`);
         break;
     }
 
@@ -143,101 +147,33 @@ export class OcrController {
 
   /**
    * Processes raw image buffer data for OCR text extraction
-   * @param req - HTTP request containing raw image buffer in body
-   * @param returnStrategy - How to return results: 'sse', 'webhook', or 'polling'
-   * @param webhookUrl - Required webhook URL when using webhook return strategy
-   * @param callbackHeaders - Optional JSON string of headers for webhook callbacks
    * @returns Job information with appropriate URLs based on return strategy
    * @throws {BadRequestException} When buffer is empty, too large, invalid format, or service is busy
+   * @param body
+   * @param req
    */
   @Post('process-buffer')
   async processBuffer(
-    @Req() req: Request,
-    @Query('returnStrategy') returnStrategy: ReturnStrategy = 'sse',
-    @Query('webhookUrl') webhookUrl?: string,
-    @Query('callbackHeaders') callbackHeaders?: string,
+    @Body() body: any,
+    @Req() req: Request
   ) {
-    this._logger.debug('Processing buffer request...');
+    const { image, options } = body;
 
-    const stream = req as unknown as Readable;
-    const chunks: Buffer[] = [];
-    for await (const chunk of stream) {
-      chunks.push(chunk as Buffer);
-    }
+    this._logger.log(`Received image for OCR. Decoding buffer...`);
 
-    const buffer = Buffer.concat(chunks);
+    // CONVERT BASE64 BACK TO BUFFER
+    const buffer = Buffer.from(image, 'base64');
 
-    this._logger.debug(`Received buffer with length: ${buffer.length}`);
+    // COMPLETE WEBHOOK URL
+    const fullWebhookUrl = body.options.webhookUrl ?
+      `${req.protocol}://${req.ip}${body.options.webhookUrl}` : '';
 
-    if (!buffer || buffer.length === 0) {
-      this._logger.error('No Data in buffer');
-      throw new BadRequestException('Empty body');
-    }
-
-    if (buffer.length > 10 * 1024 * 1024) {
-      this._logger.error('Buffer exceeds 10MB');
-      throw new BadRequestException('File too large');
-    }
-
-    if (this._ocrService.isProcessing()) {
-      throw new BadRequestException(
-        'OCR service is busy, please try again later',
-      );
-    }
-
-    // VALIDATE RETURN STRATEGY
-    if (!['sse', 'webhook', 'polling'].includes(returnStrategy)) {
-      throw new BadRequestException(
-        'Invalid return strategy. Must be: sse, webhook, or polling',
-      );
-    }
-
-    // VALIDATE WEBHOOK REQUIREMENTS
-    if (returnStrategy === 'webhook' && !webhookUrl) {
-      throw new BadRequestException(
-        'webhookUrl is required when using webhook return strategy',
-      );
-    }
-
-    // PARSE CALLBACK HEADERS IF PROVIDED
-    let parsedHeaders: Record<string, string> | undefined;
-    if (callbackHeaders) {
-      try {
-        parsedHeaders = JSON.parse(callbackHeaders);
-      } catch (error) {
-        throw new BadRequestException(
-          'Invalid callbackHeaders format. Must be valid JSON.',
-        );
-      }
-    }
-
-    const jobId = await this._ocrService.startOcrProcessOnBuffer(
+    return this._ocrService.startOcrProcessOnBuffer(
       buffer,
-      returnStrategy,
-      webhookUrl,
-      parsedHeaders,
+      options.returnStrategy,
+      fullWebhookUrl,
+      options.callbackHeaders
     );
-
-    const response: any = {
-      jobId,
-      message: 'OCR processing started (buffer mode)',
-      returnStrategy,
-    };
-
-    // ADD APPROPRIATE URLS BASED ON RETURN STRATEGY
-    switch (returnStrategy) {
-      case 'sse':
-        response.progressUrl = `/ocr/progress/${jobId}`;
-        break;
-      case 'polling':
-        response.statusUrl = `/ocr/status/${jobId}`;
-        break;
-      case 'webhook':
-        response.webhookUrl = webhookUrl;
-        break;
-    }
-
-    return response;
   }
 
   /**
