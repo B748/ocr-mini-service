@@ -46,7 +46,38 @@ const chunks = splitImageIntoChunks(imageBuffer);
 - Follow TypeScript documentation conventions
 - Keep descriptions clear and concise
 
+## TypeScript Standards
+
+### Function Return Types
+- **Every function must have an explicit return type annotation**
+- No implicit return types allowed
+- Use `void` for functions that don't return a value
+- Use `Promise<T>` for async functions
+
+**Examples:**
+```typescript
+// CORRECT - explicit return type
+function calculateSum(a: number, b: number): number {
+  return a + b;
+}
+
+// CORRECT - async function with Promise return type
+async function processData(data: string): Promise<ProcessedData> {
+  return await processor.process(data);
+}
+
+// CORRECT - void return type
+function logMessage(message: string): void {
+  console.log(message);
+}
+
+// INCORRECT - missing return type
+function calculateSum(a: number, b: number) {
+  return a + b;
+}
+```
+
 ## Application Scope
 - **Applies to:** All TypeScript/JavaScript files in the project
 - **Enforced in:** src/ directory and all subdirectories
-- **Tools:** Prettier for formatting, manual review for JSDoc completeness
+- **Tools:** Prettier for formatting, manual review for JSDoc completeness and return types
