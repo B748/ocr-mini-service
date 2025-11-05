@@ -1,205 +1,289 @@
 #!/bin/bash
 
-# Complete OCR Test Script with SSE monitoring
-# Usage: ./test-ocr-complete.sh [image-file] [api-url]
+# OCR MICROSERVICE TEST SCRIPT
+# Tests the OCR microservice by sending an image and displaying results
 
 set -e
 
-API_URL="${2:-http://localhost:8600}"
-IMAGE_FILE="${1}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# DEFAULT VALUES
+SERVER_URL="http://localhost:8600"
+RETURN_STRATEGY="polling"
+SHOW_HELP=false
 
-# Colors
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
-
-log() {
-    echo -e "${GREEN}[$(date +'%H:%M:%S')] $1${NC}"
-}
-
-error() {
-    echo -e "${RED}[$(date +'%H:%M:%S')] ERROR: $1${NC}"
+# FUNCTION TO SHOW USAGE
+show_usage() {
+    echo "Usage: $0 <image_path> [server_url] [return_strategy]"
+    echo ""
+    echo "Arguments:"
+    echo "  image_path       Path to image file (JPEG/PNG, < 10MB)"
+    echo "  server_url       OCR service URL (default: http://localhost:8600)"
+    echo "  return_strategy  'polling' or 'sse' (default: polling)"
+    echo ""
+    echo "Examples:"
+    echo "  $0 test.1.jpg"
+    echo "  $0 test.1.jpg http://localhost:8600 sse"
+    echo "  $0 ../../docs/document.png http://192.168.1.100:8600 polling"
+    echo ""
     exit 1
 }
 
-warn() {
-    echo -e "${YELLOW}[$(date +'%H:%M:%S')] WARN: $1${NC}"
-}
+# PARSE ARGUMENTS
+if [ $# -eq 0 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    show_usage
+fi
 
-info() {
-    echo -e "${BLUE}[$(date +'%H:%M:%S')] INFO: $1${NC}"
-}
+IMAGE_PATH="$1"
+if [ $# -ge 2 ]; then
+    SERVER_URL="$2"
+fi
+if [ $# -ge 3 ]; then
+    RETURN_STRATEGY="$3"
+fi
 
-# Create test image if none provided
-create_test_image() {
-    local test_image="/tmp/test-ocr-$(date +%s).png"
+# VALIDATE RETURN STRATEGY
+if [[ ! "$RETURN_STRATEGY" =~ ^(polling|sse)$ ]]; then
+    echo "[ERROR] Invalid return strategy: $RETURN_STRATEGY. Use 'polling' or 'sse'" >&2
+    exit 1
+fi
+
+# VALIDATE INPUT
+if [ ! -f "$IMAGE_PATH" ]; then
+    echo "[ERROR] Image file not found: $IMAGE_PATH" >&2
+    exit 1
+fi
+
+# CHECK FILE SIZE (10MB = 10485760 bytes)
+FILE_SIZE=$(stat -c%s "$IMAGE_PATH" 2>/dev/null || stat -f%z "$IMAGE_PATH" 2>/dev/null)
+MAX_SIZE=10485760
+
+if [ "$FILE_SIZE" -gt "$MAX_SIZE" ]; then
+    FILE_SIZE_MB=$(echo "scale=2; $FILE_SIZE / 1048576" | bc)
+    echo "[ERROR] Image file too large: ${FILE_SIZE_MB}MB (max 10MB)" >&2
+    exit 1
+fi
+
+# CHECK FILE EXTENSION
+EXTENSION=$(echo "${IMAGE_PATH##*.}" | tr '[:upper:]' '[:lower:]')
+if [[ ! "$EXTENSION" =~ ^(jpg|jpeg|png)$ ]]; then
+    echo "[ERROR] Unsupported file format: .$EXTENSION. Supported: jpg, jpeg, png" >&2
+    exit 1
+fi
+
+# DETERMINE MIME TYPE
+case "$EXTENSION" in
+    jpg|jpeg) MIME_TYPE="image/jpeg" ;;
+    png) MIME_TYPE="image/png" ;;
+    *) MIME_TYPE="image/jpeg" ;;
+esac
+
+FILE_SIZE_MB=$(echo "scale=2; $FILE_SIZE / 1048576" | bc)
+
+echo "[OCR] Testing OCR Microservice"
+echo "[FILE] Image: $IMAGE_PATH (${FILE_SIZE_MB} MB)"
+echo "[SERVER] Server: $SERVER_URL"
+echo "[MODE] Return strategy: $RETURN_STRATEGY"
+echo ""
+
+# CHECK DEPENDENCIES
+if ! command -v curl >/dev/null 2>&1; then
+    echo "[ERROR] curl is required but not installed" >&2
+    exit 1
+fi
+
+if ! command -v jq >/dev/null 2>&1; then
+    echo "[ERROR] jq is required but not installed" >&2
+    exit 1
+fi
+
+# CHECK SERVER STATUS
+echo "[WAIT] Checking server status..."
+if ! STATUS_RESPONSE=$(curl -s -f --connect-timeout 10 "$SERVER_URL/ocr/status"); then
+    echo "[ERROR] Cannot connect to OCR server at $SERVER_URL" >&2
+    exit 1
+fi
+
+echo "[OK] Server is running"
+
+# SEND OCR REQUEST
+echo "[SEND] Sending multipart request..."
+
+RESPONSE=$(curl -s -X POST "$SERVER_URL/ocr/process" \
+    -F "image=@$IMAGE_PATH;type=$MIME_TYPE" \
+    -F "body={\"returnStrategy\":\"$RETURN_STRATEGY\"}" \
+    -w "%{http_code}")
+
+# EXTRACT HTTP STATUS CODE (LAST 3 CHARACTERS)
+HTTP_CODE="${RESPONSE: -3}"
+RESPONSE_BODY="${RESPONSE%???}"
+
+if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "201" ]; then
+    echo "[ERROR] HTTP $HTTP_CODE: $RESPONSE_BODY" >&2
+    exit 1
+fi
+
+# PARSE RESPONSE
+JOB_ID=$(echo "$RESPONSE_BODY" | jq -r '.jobId')
+if [ "$JOB_ID" = "null" ] || [ -z "$JOB_ID" ]; then
+    echo "[ERROR] Invalid response: $RESPONSE_BODY" >&2
+    exit 1
+fi
+
+echo "[JOB] Started job: $JOB_ID"
+
+if [ "$RETURN_STRATEGY" = "sse" ]; then
+    # SSE MODE - LISTEN FOR REAL-TIME PROGRESS
+    echo "[SSE] Connecting to progress stream..."
+    START_TIME=$(date +%s)
     
-    if command -v convert &> /dev/null; then
-        log "Creating test image with ImageMagick..."
-        convert -size 600x200 xc:white \
-                -font Arial -pointsize 24 -fill black \
-                -gravity center \
-                -annotate +0-30 "Tesseract API Test" \
-                -annotate +0+0 "OCR Processing Demo" \
-                -annotate +0+30 "$(date '+%Y-%m-%d %H:%M:%S')" \
-                "$test_image"
-    elif command -v python3 &> /dev/null && python3 -c "import PIL" 2>/dev/null; then
-        log "Creating test image with Python PIL..."
-        python3 << EOF
-from PIL import Image, ImageDraw, ImageFont
-import datetime
-
-img = Image.new('RGB', (600, 200), color='white')
-draw = ImageDraw.Draw(img)
-
-try:
-    font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 24)
-except:
-    font = ImageFont.load_default()
-
-draw.text((300, 60), "Tesseract API Test", fill='black', anchor='mm', font=font)
-draw.text((300, 100), "OCR Processing Demo", fill='black', anchor='mm', font=font)
-draw.text((300, 140), datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), fill='black', anchor='mm', font=font)
-
-img.save('$test_image')
-EOF
-    else
-        error "Cannot create test image. Please provide an image file or install ImageMagick/Python PIL"
-    fi
+    # CREATE TEMPORARY FILE FOR SSE OUTPUT
+    SSE_OUTPUT=$(mktemp)
+    trap "rm -f $SSE_OUTPUT" EXIT
     
-    if [ -f "$test_image" ]; then
-        log "Test image created: $test_image"
-        echo "$test_image"
-    else
-        error "Failed to create test image"
-    fi
-}
-
-# Check if API is available
-check_api() {
-    log "Checking API availability at $API_URL..."
+    # START SSE CONNECTION IN BACKGROUND
+    curl -s -N --no-buffer "$SERVER_URL/ocr/progress/$JOB_ID" > "$SSE_OUTPUT" &
+    CURL_PID=$!
     
-    if curl -s -f "$API_URL/ocr/status" > /dev/null; then
-        log "✓ API is available"
-        curl -s "$API_URL/ocr/status" | jq . 2>/dev/null || curl -s "$API_URL/ocr/status"
-    else
-        error "✗ API is not available at $API_URL"
-    fi
-}
-
-# Submit OCR request
-submit_ocr_request() {
-    local image_file="$1"
-    
-    log "Submitting OCR request with image: $(basename "$image_file")"
-    log "Image size: $(du -h "$image_file" | cut -f1)"
-    
-    local response=$(curl -s -X POST -F "image=@$image_file" "$API_URL/ocr/process")
-    
-    if echo "$response" | jq . > /dev/null 2>&1; then
-        log "✓ OCR request submitted successfully"
-        echo "$response" | jq .
-        
-        local job_id=$(echo "$response" | jq -r '.jobId')
-        if [ "$job_id" != "null" ] && [ -n "$job_id" ]; then
-            echo "$job_id"
-        else
-            error "No job ID received in response"
-        fi
-    else
-        error "Failed to submit OCR request: $response"
-    fi
-}
-
-# Monitor progress with SSE
-monitor_progress() {
-    local job_id="$1"
-    
-    log "Monitoring progress for job: $job_id"
-    log "Starting SSE client..."
-    
-    if [ -f "$SCRIPT_DIR/test-sse-client.js" ]; then
-        node "$SCRIPT_DIR/test-sse-client.js" "$job_id" "$API_URL"
-    else
-        warn "SSE client not found, using curl fallback..."
-        
-        # Fallback: use curl to monitor (less pretty but functional)
-        timeout 60s curl -N -H "Accept: text/event-stream" \
-            "$API_URL/ocr/progress/$job_id" | while IFS= read -r line; do
-            if [[ $line == data:* ]]; then
-                local data="${line#data: }"
-                echo "[$(date +'%H:%M:%S')] $data" | jq . 2>/dev/null || echo "[$(date +'%H:%M:%S')] $data"
+    # MONITOR SSE EVENTS
+    tail -f "$SSE_OUTPUT" 2>/dev/null | while IFS= read -r line; do
+        if [[ "$line" =~ ^data:\ (.*)$ ]]; then
+            EVENT_DATA="${BASH_REMATCH[1]}"
+            
+            # SKIP EMPTY DATA LINES
+            if [ -z "$EVENT_DATA" ] || [ "$EVENT_DATA" = " " ]; then
+                continue
             fi
-        done
-    fi
-}
-
-# Main execution
-main() {
-    log "Starting complete OCR test..."
-    log "API URL: $API_URL"
+            
+            # PARSE EVENT DATA
+            EVENT_TYPE=$(echo "$EVENT_DATA" | jq -r '.type // "unknown"')
+            
+            case "$EVENT_TYPE" in
+                "progress")
+                    STAGE=$(echo "$EVENT_DATA" | jq -r '.stage // "unknown"')
+                    PERCENT=$(echo "$EVENT_DATA" | jq -r '.percent // 0')
+                    echo "  [PROGRESS] $STAGE: ${PERCENT}%"
+                    ;;
+                "completed"|"complete")
+                    END_TIME=$(date +%s)
+                    DURATION=$((END_TIME - START_TIME))
+                    
+                    echo "[SUCCESS] OCR completed!"
+                    echo "[TIME] Duration: $DURATION seconds"
+                    echo ""
+                    
+                    # EXTRACT RESULTS FROM SSE EVENT
+                    RESULT=$(echo "$EVENT_DATA" | jq '.result')
+                    WORD_COUNT=$(echo "$RESULT" | jq '.words | length')
+                    LINE_COUNT=$(echo "$RESULT" | jq '.lines | length')
+                    PARAGRAPH_COUNT=$(echo "$RESULT" | jq '.paragraphs | length')
+                    BLOCK_COUNT=$(echo "$RESULT" | jq '.blocks | length')
+                    
+                    echo "[RESULTS] OCR Results Summary:"
+                    echo "  Words: $WORD_COUNT"
+                    echo "  Lines: $LINE_COUNT"
+                    echo "  Paragraphs: $PARAGRAPH_COUNT"
+                    echo "  Blocks: $BLOCK_COUNT"
+                    
+                    if [ "$WORD_COUNT" -gt 0 ]; then
+                        echo "[TEXT] Extracted Text:"
+                        ALL_TEXT=$(echo "$RESULT" | jq -r '.words[].data.text' | tr '\n' ' ')
+                        echo "$ALL_TEXT"
+                        echo ""
+                    fi
+                    
+                    # SAVE RESULTS
+                    OUTPUT_FILE="ocr-result-$(date +%Y%m%d-%H%M%S).json"
+                    echo "$RESULT" | jq '.' > "$OUTPUT_FILE"
+                    echo "[SAVE] Results saved to: $OUTPUT_FILE"
+                    
+                    # CLEANUP AND EXIT
+                    kill $CURL_PID 2>/dev/null || true
+                    exit 0
+                    ;;
+                "failed")
+                    ERROR_MSG=$(echo "$EVENT_DATA" | jq -r '.error // "Unknown error"')
+                    echo "[ERROR] OCR failed: $ERROR_MSG" >&2
+                    kill $CURL_PID 2>/dev/null || true
+                    exit 1
+                    ;;
+                "error")
+                    ERROR_MSG=$(echo "$EVENT_DATA" | jq -r '.message // "Unknown error"')
+                    echo "[ERROR] SSE error: $ERROR_MSG" >&2
+                    kill $CURL_PID 2>/dev/null || true
+                    exit 1
+                    ;;
+                *)
+                    echo "  [EVENT] $EVENT_TYPE"
+                    ;;
+            esac
+        fi
+    done
     
-    # Check API availability
-    check_api
-    echo ""
+    # IF WE GET HERE, SSE STREAM ENDED WITHOUT COMPLETION
+    kill $CURL_PID 2>/dev/null || true
+    echo "[ERROR] SSE stream ended unexpectedly" >&2
+    exit 1
     
-    # Determine image file
-    if [ -z "$IMAGE_FILE" ]; then
-        warn "No image file provided, creating test image..."
-        IMAGE_FILE=$(create_test_image)
-        CLEANUP_IMAGE=true
-    elif [ ! -f "$IMAGE_FILE" ]; then
-        error "Image file not found: $IMAGE_FILE"
-    else
-        log "Using provided image: $IMAGE_FILE"
-        CLEANUP_IMAGE=false
-    fi
+else
+    # POLLING MODE - ORIGINAL BEHAVIOR
+    echo "[POLL] Waiting for completion..."
+    MAX_ATTEMPTS=60
+    ATTEMPT=0
+    START_TIME=$(date +%s)
     
-    echo ""
+    while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+        sleep 3
+        ATTEMPT=$((ATTEMPT + 1))
+        
+        STATUS_RESPONSE=$(curl -s -f "$SERVER_URL/ocr/status/$JOB_ID" || echo '{"status":"error"}')
+        STATUS=$(echo "$STATUS_RESPONSE" | jq -r '.status')
+        
+        echo "  [STATUS] $STATUS (attempt $ATTEMPT)"
+        
+        if [ "$STATUS" = "completed" ]; then
+            END_TIME=$(date +%s)
+            DURATION=$((END_TIME - START_TIME))
+            
+            echo "[SUCCESS] OCR completed!"
+            echo "[TIME] Duration: $DURATION seconds"
+            echo ""
+            
+            # EXTRACT RESULTS
+            RESULT=$(echo "$STATUS_RESPONSE" | jq '.result')
+            WORD_COUNT=$(echo "$RESULT" | jq '.words | length')
+            LINE_COUNT=$(echo "$RESULT" | jq '.lines | length')
+            PARAGRAPH_COUNT=$(echo "$RESULT" | jq '.paragraphs | length')
+            BLOCK_COUNT=$(echo "$RESULT" | jq '.blocks | length')
+            
+            echo "[RESULTS] OCR Results Summary:"
+            echo "  Words: $WORD_COUNT"
+            echo "  Lines: $LINE_COUNT"
+            echo "  Paragraphs: $PARAGRAPH_COUNT"
+            echo "  Blocks: $BLOCK_COUNT"
+            
+            if [ "$WORD_COUNT" -gt 0 ]; then
+                echo "[TEXT] Extracted Text:"
+                ALL_TEXT=$(echo "$RESULT" | jq -r '.words[].data.text' | tr '\n' ' ')
+                echo "$ALL_TEXT"
+                echo ""
+            fi
+            
+            # SAVE RESULTS
+            OUTPUT_FILE="ocr-result-$(date +%Y%m%d-%H%M%S).json"
+            echo "$RESULT" | jq '.' > "$OUTPUT_FILE"
+            echo "[SAVE] Results saved to: $OUTPUT_FILE"
+            
+            exit 0
+            
+        elif [ "$STATUS" = "failed" ]; then
+            ERROR_MSG=$(echo "$STATUS_RESPONSE" | jq -r '.error // "Unknown error"')
+            echo "[ERROR] OCR failed: $ERROR_MSG" >&2
+            exit 1
+        elif [ "$STATUS" = "error" ]; then
+            echo "[ERROR] Failed to get job status" >&2
+            exit 1
+        fi
+    done
     
-    # Submit OCR request
-    JOB_ID=$(submit_ocr_request "$IMAGE_FILE")
-    echo ""
-    
-    # Monitor progress
-    log "Job ID: $JOB_ID"
-    monitor_progress "$JOB_ID"
-    
-    # Cleanup
-    if [ "$CLEANUP_IMAGE" = true ] && [ -f "$IMAGE_FILE" ]; then
-        log "Cleaning up test image..."
-        rm -f "$IMAGE_FILE"
-    fi
-    
-    log "Complete OCR test finished!"
-    exit 0
-}
-
-# Cleanup function
-cleanup() {
-    if [ "$CLEANUP_IMAGE" = true ] && [ -f "$IMAGE_FILE" ]; then
-        rm -f "$IMAGE_FILE"
-    fi
-}
-
-# Set trap for cleanup
-trap cleanup EXIT
-
-# Check dependencies
-if ! command -v curl &> /dev/null; then
-    error "curl is required but not installed"
+    echo "[TIMEOUT] OCR processing timed out after $MAX_ATTEMPTS attempts" >&2
+    exit 1
 fi
-
-if ! command -v jq &> /dev/null; then
-    warn "jq not found - JSON output will be less pretty"
-fi
-
-if ! command -v node &> /dev/null; then
-    warn "Node.js not found - will use curl fallback for SSE monitoring"
-fi
-
-# Run main function
-main "$@"
