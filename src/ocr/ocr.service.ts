@@ -2,7 +2,11 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Observable, Subject } from 'rxjs';
 import { TesseractService } from './tesseract.service';
 import { nanoid } from '../types/nanoid.function';
-import { ReturnStrategy, JobStatus, WebhookPayload } from '../types/return-strategy.types';
+import {
+  ReturnStrategy,
+  JobStatus,
+  WebhookPayload,
+} from '../types/return-strategy.types';
 import { response } from 'express';
 import axios from 'axios';
 
@@ -36,14 +40,14 @@ export class OcrService {
    * @returns Promise resolving to unique job ID
    */
   async startOcrProcessOnBuffer(
-    buffer: Buffer, 
+    buffer: Buffer,
     returnStrategy: ReturnStrategy = 'sse',
     webhookUrl?: string,
-    callbackHeaders?: Record<string, string>
+    callbackHeaders?: Record<string, string>,
   ): Promise<string> {
     this._logger.debug('Starting OCR process...');
     const jobId = nanoid();
-    
+
     // INITIALIZE JOB STATUS
     const jobStatus: JobStatus = {
       jobId,
@@ -61,9 +65,17 @@ export class OcrService {
     this._processing = true;
 
     // START OCR PROCESSING IN BACKGROUND
-    void this._processOcrAsync(jobId, buffer, returnStrategy, webhookUrl, callbackHeaders);
+    void this._processOcrAsync(
+      jobId,
+      buffer,
+      returnStrategy,
+      webhookUrl,
+      callbackHeaders,
+    );
 
-    this._logger.debug(`OCR-job created: ${jobId} with strategy: ${returnStrategy}`);
+    this._logger.debug(
+      `OCR-job created: ${jobId} with strategy: ${returnStrategy}`,
+    );
     return jobId;
   }
 
@@ -89,14 +101,14 @@ export class OcrService {
     buffer: Buffer,
     returnStrategy: ReturnStrategy,
     webhookUrl?: string,
-    callbackHeaders?: Record<string, string>
+    callbackHeaders?: Record<string, string>,
   ) {
     const progressSubject = this._progressStreams.get(jobId);
-    
+
     try {
       // PROCESS IMAGE WITH TESSERACT
-      // const result = await this.tesseractService.processImage(buffer);
-      const result = await this.tesseractService.dummyOcrProcessing()
+      const result = await this.tesseractService.processImage(buffer);
+      // const result = await this.tesseractService.dummyOcrProcessing()
 
       this._logger.debug(`OCR-job done: ${jobId}`);
 
@@ -109,14 +121,14 @@ export class OcrService {
       }
 
       // HANDLE DIFFERENT RETURN STRATEGIES
-      await this._handleCompletion(jobId,
+      await this._handleCompletion(
+        jobId,
         returnStrategy,
         result,
         webhookUrl,
         callbackHeaders,
-        progressSubject
+        progressSubject,
       );
-
     } catch (error) {
       this._logger.error(`OCR-job failed: ${jobId}`, error);
 
@@ -129,8 +141,14 @@ export class OcrService {
       }
 
       // HANDLE DIFFERENT RETURN STRATEGIES FOR ERRORS
-      await this._handleError(jobId, returnStrategy, error.message || 'OCR processing failed', webhookUrl, callbackHeaders, progressSubject);
-
+      await this._handleError(
+        jobId,
+        returnStrategy,
+        error.message || 'OCR processing failed',
+        webhookUrl,
+        callbackHeaders,
+        progressSubject,
+      );
     } finally {
       this._processing = false;
       if (progressSubject) {
@@ -193,7 +211,7 @@ export class OcrService {
     result: any,
     webhookUrl?: string,
     callbackHeaders?: Record<string, string>,
-    progressSubject?: Subject<MessageEvent>
+    progressSubject?: Subject<MessageEvent>,
   ) {
     switch (returnStrategy) {
       case 'sse':
@@ -206,7 +224,13 @@ export class OcrService {
         break;
       case 'webhook':
         if (webhookUrl) {
-          await this._sendWebhook(jobId, 'completed', webhookUrl, callbackHeaders, result);
+          await this._sendWebhook(
+            jobId,
+            'completed',
+            webhookUrl,
+            callbackHeaders,
+            result,
+          );
         }
         break;
       case 'polling':
@@ -232,7 +256,7 @@ export class OcrService {
     error: string,
     webhookUrl?: string,
     callbackHeaders?: Record<string, string>,
-    progressSubject?: Subject<MessageEvent>
+    progressSubject?: Subject<MessageEvent>,
   ) {
     switch (returnStrategy) {
       case 'sse':
@@ -243,13 +267,20 @@ export class OcrService {
           });
         }
         break;
-      
+
       case 'webhook':
         if (webhookUrl) {
-          await this._sendWebhook(jobId, 'failed', webhookUrl, callbackHeaders, undefined, error);
+          await this._sendWebhook(
+            jobId,
+            'failed',
+            webhookUrl,
+            callbackHeaders,
+            undefined,
+            error,
+          );
         }
         break;
-      
+
       case 'polling':
         // STATUS IS ALREADY UPDATED IN JOB STATUS MAP
         this._logger.debug(`Job ${jobId} failed, available for polling`);
@@ -273,7 +304,7 @@ export class OcrService {
     webhookUrl: string,
     headers?: Record<string, string>,
     result?: any,
-    error?: string
+    error?: string,
   ) {
     try {
       const payload: WebhookPayload = {
@@ -294,7 +325,9 @@ export class OcrService {
       });
 
       if (!response.ok) {
-        this._logger.warn(`Webhook failed "${webhookUrl}/${jobId}": ${response.status} ${response.statusText}`);
+        this._logger.warn(
+          `Webhook failed "${webhookUrl}/${jobId}": ${response.status} ${response.statusText}`,
+        );
       } else {
         this._logger.debug(`Webhook sent successfully for job ${jobId}`);
       }
