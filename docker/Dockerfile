@@ -1,5 +1,10 @@
 # Multi-stage build for optimal image size
-FROM node:20-alpine AS builder
+# Build arguments for cross-platform builds
+ARG BUILDPLATFORM
+ARG TARGETPLATFORM
+ARG TARGETARCH
+
+FROM --platform=$BUILDPLATFORM node:20-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache python3 make g++
@@ -11,8 +16,16 @@ COPY package*.json ./
 COPY tsconfig.json ./
 COPY nest-cli.json ./
 
+# Set npm configuration for cross-platform builds and ARM64 compatibility
+RUN npm config set target_platform linux && \
+    npm config set target_arch $TARGETARCH && \
+    npm config set cache /tmp/.npm && \
+    npm config set unsafe-perm true
+
 # Install all dependencies (including dev dependencies for build)
-RUN npm ci --no-audit --no-fund
+# Use specific flags for ARM64 compatibility and disable problematic features
+RUN --mount=type=cache,target=/tmp/.npm \
+    npm ci --no-audit --no-fund --no-optional --ignore-scripts
 
 # Copy source code
 COPY src/ ./src/
@@ -25,7 +38,7 @@ RUN npm prune --production && \
     npm cache clean --force
 
 # Production stage
-FROM node:20-alpine AS production
+FROM --platform=$TARGETPLATFORM node:20-alpine AS production
 
 # Install Tesseract and language packs
 RUN apk add --no-cache \
