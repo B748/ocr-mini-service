@@ -55,12 +55,10 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: |
-            network=host
 
       - name: Build and push multi-arch image
         uses: docker/build-push-action@v6
+        timeout-minutes: 30
         with:
           context: .
           file: ./docker/Dockerfile
@@ -69,5 +67,5 @@ jobs:
           platforms: linux/amd64,linux/arm64
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          build-args: |
-            BUILDKIT_INLINE_CACHE=1
+          provenance: false
+          sbom: false

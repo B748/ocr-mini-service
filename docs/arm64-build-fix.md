@@ -17,18 +17,18 @@ This occurs during `npm ci` when building ARM64 images on x86_64 runners using Q
 
 ### 1. Updated Dockerfile
 **Changes made to `docker/Dockerfile`:**
-- Added proper build arguments for cross-platform builds
-- Configured npm for ARM64 compatibility
+- Removed problematic npm config settings that aren't valid
+- Added environment variables for npm configuration
 - Added `--ignore-scripts` flag to skip problematic post-install scripts
 - Used build cache mounting for better performance
-- Set `unsafe-perm true` for permission issues
+- Simplified platform handling to avoid QEMU issues
 
 ### 2. Enhanced GitHub Actions Workflow
 **Changes made to `.github/workflows/docker-build.yml`:**
 - Added proper QEMU setup with ARM64 platform specification
-- Updated Docker Buildx with network host driver
+- Simplified Docker Buildx configuration
 - Added build cache configuration
-- Improved build arguments handling
+- Added timeout and disabled provenance/SBOM for faster builds
 
 ### 3. Alternative Build Strategy
 **Created `.github/workflows/docker-build-alternative.yml`:**
@@ -70,12 +70,13 @@ docker build -f docker/Dockerfile.arm64 -t tesseract-api:arm64-simple .
 
 ## Key Fixes Applied
 
-1. **npm Configuration**: Set proper target platform and architecture
+1. **Environment Variables**: Use NPM_CONFIG_* environment variables instead of invalid npm config commands
 2. **Script Skipping**: Use `--ignore-scripts` to avoid problematic post-install scripts
 3. **Cache Optimization**: Mount npm cache to improve build performance
-4. **Permission Handling**: Set `unsafe-perm true` for container builds
+4. **Simplified Platform Handling**: Remove complex cross-platform build arguments
 5. **QEMU Setup**: Proper QEMU configuration in GitHub Actions
-6. **Build Isolation**: Separate platform builds to reduce complexity
+6. **Build Timeout**: Added 30-minute timeout for ARM64 builds
+7. **Disabled Extras**: Disabled provenance and SBOM generation for faster builds
 
 ## Verification
 After applying these fixes, the ARM64 build should complete successfully without QEMU illegal instruction errors.
