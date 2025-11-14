@@ -3,11 +3,14 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Logger,
   Param,
   Post,
   Query,
   Req,
+  ServiceUnavailableException,
   Sse,
   UploadedFile,
   UseInterceptors,
@@ -71,6 +74,7 @@ export class OcrController {
    * @throws {BadRequestException} When file is missing, invalid format, too large, or service is busy
    */
   @Post('process')
+  @HttpCode(HttpStatus.ACCEPTED)
   @UseInterceptors(FileInterceptor('image'))
   async processImage(
     @UploadedFile() file: Express.Multer.File,
@@ -89,8 +93,8 @@ export class OcrController {
     }
 
     if (this._ocrService.isProcessing()) {
-      throw new BadRequestException(
-        'OCR service is busy, please try again later',
+      throw new ServiceUnavailableException(
+        'OCR service is busy processing another request',
       );
     }
 
@@ -153,6 +157,7 @@ export class OcrController {
    * @param req
    */
   @Post('process-buffer')
+  @HttpCode(HttpStatus.ACCEPTED)
   async processBuffer(
     @Body() body: any,
     @Req() req: Request
