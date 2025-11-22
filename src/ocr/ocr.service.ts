@@ -10,6 +10,8 @@ import {
 } from '../types/return-strategy.types';
 import { response } from 'express';
 import { OcrProcessResult } from '../types/ocr.types';
+import { promises as fs } from 'fs';
+import { join } from 'path';
 
 interface MessageEvent {
   data: string;
@@ -21,6 +23,8 @@ export class OcrService {
   private _processing = false;
   private _progressStreams = new Map<string, Subject<MessageEvent>>();
   private _jobStatuses = new Map<string, JobStatus>();
+  private readonly _tempDir =
+    process.env.TESSERACT_TEMP_DIR || '/tmp/tesseract-api';
 
   constructor(
     private readonly tesseractService: TesseractService,
@@ -92,6 +96,43 @@ export class OcrService {
   }
 
   /**
+   * Writes image buffer to a temporary file
+   * @param imageBuffer - The image data to write
+   * @param inputPath - Path where the file should be written
+   * @returns Promise that resolves when file is written successfully
+   * @throws {Error} When file cannot be written to temp directory
+   * @private
+   */
+  private async _writeBufferToTempFile(
+    imageBuffer: Buffer,
+    inputPath: string,
+  ): Promise<void> {
+    try {
+      await fs.writeFile(inputPath, imageBuffer);
+      this._logger.debug(
+        `Created input file: ${inputPath} (${imageBuffer.length} bytes)`,
+      );
+    } catch (writeError: any) {
+      this._logger.error(
+        `Failed to write input file to ${inputPath}:`,
+        writeError,
+      );
+
+      // CHECK DIRECTORY PERMISSIONS
+      try {
+        const stats = await fs.stat(this._tempDir);
+        this._logger.error(
+          `Temp directory permissions: ${stats.mode.toString(8)}`,
+        );
+      } catch (statError) {
+        this._logger.error(`Cannot stat temp directory: ${statError.message}`);
+      }
+
+      throw new Error(`Cannot write to temp directory: ${writeError.message}`);
+    }
+  }
+
+  /**
    * Processes OCR asynchronously and handles different return strategies
    * @param jobId - Unique job identifier
    * @param buffer - Image buffer to process
@@ -108,21 +149,27 @@ export class OcrService {
     callbackHeaders?: Record<string, string>,
   ) {
     const progressSubject = this._progressStreams.get(jobId);
+    const inputPath = join(this._tempDir, `input_${jobId}.png`);
 
     try {
+      // WRITE BUFFER TO TEMP FILE
+      await this._writeBufferToTempFile(buffer, inputPath);
+
       // PROCESS IMAGE WITH BOTH TESSERACT AND ZXING IN PARALLEL
       const [textResults, codeResults] = await Promise.all([
-        this.tesseractService.processImage(buffer),
-        this.zxingService.processImage(buffer).catch((error) => {
+        this.tesseractService.processImage(inputPath),
+        this.zxingService.scan(inputPath).catch((error) => {
           this._logger.warn(`ZXing processing failed: ${error.message}`);
           return []; // CONTINUE EVEN IF ZXING FAILS
         }),
       ]);
 
+      console.log(codeResults);
+
       // COMBINE RESULTS
       const result: OcrProcessResult = {
         words: textResults,
-        codes: codeResults,
+        codes: [],
       };
 
       this._logger.debug(
@@ -170,6 +217,18 @@ export class OcrService {
       this._processing = false;
       if (progressSubject) {
         progressSubject.complete();
+      }
+
+      // CLEANUP INPUT FILE
+      try {
+        await fs.unlink(inputPath);
+        this._logger.debug(`Cleaned up input file: ${inputPath}`);
+      } catch (error: any) {
+        if (error.code !== 'ENOENT') {
+          this._logger.warn(
+            `Failed to cleanup input file ${inputPath}: ${error.message}`,
+          );
+        }
       }
     }
   }

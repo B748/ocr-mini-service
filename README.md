@@ -10,15 +10,8 @@ OCR Microservice using Tesseract with flexible result delivery: Server-Sent Even
 ## Quick Start
 
 ```bash
-# Install dependencies
-npm install
-
-# Start development server
-npm run start:dev
-
-# Or use Docker
-cd docker
-docker-compose up --build
+docker stop tesseract-api && docker container rm tesseract-api && docker pull ghcr.io/b748/ocr-mini-service:latest && docker run -d --name tesseract-api -p 8600:8600 ghcr.io/b
+748/ocr-mini-service:latest && docker logs --follow tesseract-api
 ```
 
 The API will be available at `http://localhost:8600`

@@ -144,23 +144,15 @@ export class TesseractService {
   }
 
   /**
-   * Processes an image buffer using Tesseract OCR
-   * @param imageBuffer - The image data to process
+   * Processes an image file using Tesseract OCR
+   * @param inputPath - Path to the input image file
    * @returns Promise resolving to array of OCR results with text and bounding boxes
-   * @throws {Error} When image buffer is invalid or OCR processing fails
+   * @throws {Error} When OCR processing fails
    */
-  async processImage(
-    imageBuffer: Buffer,
-  ): Promise<DimensionData<TextContent>[]> {
-    // VALIDATE INPUT
-    if (!imageBuffer || imageBuffer.length === 0) {
-      throw new Error('Invalid image buffer provided');
-    }
-
+  async processImage(inputPath: string): Promise<DimensionData<TextContent>[]> {
     // CHECK IF TESSERACT IS AVAILABLE
     await this._checkTesseractAvailability();
     const jobId = nanoid();
-    const inputPath = join(this._tempDir, `input_${jobId}.png`);
     const outputBasePath = join(this._tempDir, `output_${jobId}`);
     const tsvOutputPath = `${outputBasePath}.tsv`;
 
@@ -168,34 +160,6 @@ export class TesseractService {
     const createdFiles: string[] = [];
 
     try {
-      // SAVE IMAGE TO TEMP FILE
-      try {
-        await fs.writeFile(inputPath, imageBuffer);
-        createdFiles.push(inputPath);
-        this._logger.debug(
-          `Created input file: ${inputPath} (${imageBuffer.length} bytes)`,
-        );
-      } catch (writeError: any) {
-        this._logger.error(
-          `Failed to write input file to ${inputPath}:`,
-          writeError,
-        );
-
-        // CHECK DIRECTORY PERMISSIONS
-        try {
-          const stats = await fs.stat(this._tempDir);
-          this._logger.error(
-            `Temp directory permissions: ${stats.mode.toString(8)}`,
-          );
-        } catch (statError) {
-          this._logger.error(`Cannot stat temp directory: ${statError.message}`);
-        }
-
-        throw new Error(
-          `Cannot write to temp directory: ${writeError.message}`,
-        );
-      }
-
       // RUN TESSERACT WITH TSV OUTPUT FOR DETAILED WORD-LEVEL DATA
       await this._runTesseract(inputPath, outputBasePath);
 

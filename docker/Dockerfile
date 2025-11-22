@@ -17,44 +17,47 @@ ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 ENV NPM_CONFIG_FUND=false
 ENV NPM_CONFIG_AUDIT=false
 
-# Install all dependencies (including dev dependencies for build)
-# Use specific flags for ARM64 compatibility and disable problematic features
+# INSTALL ALL DEPENDENCIES (INCLUDING DEV DEPENDENCIES FOR BUILD)
+# USE SPECIFIC FLAGS FOR ARM64 COMPATIBILITY AND DISABLE PROBLEMATIC FEATURES
 RUN --mount=type=cache,target=/tmp/.npm \
     npm ci --no-optional --ignore-scripts
 
-# Copy source code
+# COPY SOURCE CODE
 COPY src/ ./src/
 
-# Build application using NestJS CLI
+# BUILD APPLICATION USING NESTJS CLI
 RUN npx nest build
 
-# Clean up dev dependencies after build to reduce image size
+# CLEAN UP DEV DEPENDENCIES AFTER BUILD TO REDUCE IMAGE SIZE
 RUN npm prune --production && \
     npm cache clean --force
 
-# Production stage
+# PRODUCTION STAGE
 FROM node:20-alpine AS production
 
-# Install Tesseract, ZXing, and language packs
+# INSTALL TESSERACT AND LANGUAGE PACKS
 RUN apk add --no-cache \
     tesseract-ocr \
     tesseract-ocr-data-deu \
     tesseract-ocr-data-eng \
-    zxing-cpp \
     && rm -rf /var/cache/apk/*
 
-# Create app user for security
+# CREATE APP USER FOR SECURITY
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S tesseract -u 1001 -G nodejs
 
 WORKDIR /app
 
-# Copy built application and dependencies
+# ZXing DOWNLOAD FROM MAVEM
+RUN mkdir -p /opt/zxing && \
+    wget -O /opt/zxing/zxing.jar https://repo1.maven.org/maven2/com/google/zxing/javase/3.5.2/javase-3.5.2.jar
+
+# COPY BUILT APPLICATION AND DEPENDENCIES
 COPY --from=builder --chown=tesseract:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=tesseract:nodejs /app/dist ./dist
 COPY --from=builder --chown=tesseract:nodejs /app/package*.json ./
 
-# Copy entrypoint script
+# COPY ENTRYPOINT SCRIPT
 COPY --chown=tesseract:nodejs docker/docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
