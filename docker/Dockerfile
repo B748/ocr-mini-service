@@ -52,6 +52,9 @@ WORKDIR /app
 RUN mkdir -p /opt/zxing && \
     wget -O /opt/zxing/zxing.jar https://repo1.maven.org/maven2/com/google/zxing/javase/3.5.2/javase-3.5.2.jar
 
+# INSTALL OpenJDK 17
+RUN apk add --no-cache openjdk17
+
 # COPY BUILT APPLICATION AND DEPENDENCIES
 COPY --from=builder --chown=tesseract:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=tesseract:nodejs /app/dist ./dist

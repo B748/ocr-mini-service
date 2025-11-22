@@ -3,81 +3,89 @@
 
 FROM node:20-alpine AS builder
 
-# Install build dependencies for ARM64
-RUN apk add --no-cache \
-    python3 \
-    make \
-    g++ \
-    && rm -rf /var/cache/apk/*
+# INSTALL BUILD DEPENDENCIES FOR ARM64
+RUN apk add --no-cache python3 make g++
 
 WORKDIR /app
 
-# Copy package files
+# COPY PACKAGE FILES
 COPY package*.json ./
 COPY tsconfig.json ./
 COPY nest-cli.json ./
-COPY .prettierrc ./
 
-# Install all dependencies (including dev dependencies for build)
-RUN npm ci --no-audit --no-fund
+# SET ENVIRONMENT VARIABLES FOR ARM64 COMPATIBILITY
+ENV NPM_CONFIG_CACHE=/tmp/.npm
+ENV NPM_CONFIG_UPDATE_NOTIFIER=false
+ENV NPM_CONFIG_FUND=false
+ENV NPM_CONFIG_AUDIT=false
 
-# Copy source code
+# INSTALL ALL DEPENDENCIES (INCLUDING DEV DEPENDENCIES FOR BUILD)
+# USE SPECIFIC FLAGS FOR ARM64 COMPATIBILITY AND DISABLE PROBLEMATIC FEATURES
+RUN --mount=type=cache,target=/tmp/.npm \
+    npm ci --no-optional --ignore-scripts
+
+# COPY SOURCE CODE
 COPY src/ ./src/
 
-# Build application using NestJS CLI
+# BUILD APPLICATION USING NESTJS CLI
 RUN npx nest build
 
-# Clean up dev dependencies after build to reduce image size
+# CLEAN UP DEV DEPENDENCIES AFTER BUILD TO REDUCE IMAGE SIZE
 RUN npm prune --production && \
     npm cache clean --force
 
 # Production stage optimized for Raspberry Pi
 FROM node:20-alpine AS production
 
-# Install Tesseract with minimal footprint for Pi
+# INSTALL TESSERACT AND LANGUAGE PACKS
 RUN apk add --no-cache \
     tesseract-ocr \
     tesseract-ocr-data-deu \
     tesseract-ocr-data-eng \
-    wget \
-    && rm -rf /var/cache/apk/* \
-    && rm -rf /tmp/*
+    && rm -rf /var/cache/apk/*
 
-# Create app user for security
+# CREATE APP USER FOR SECURITY
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S tesseract -u 1001 -G nodejs
 
 WORKDIR /app
 
-# Copy built application and production dependencies with proper ownership
+# ZXING DOWNLOAD FROM MAVEN
+RUN mkdir -p /opt/zxing && \
+    wget -O /opt/zxing/zxing.jar https://repo1.maven.org/maven2/com/google/zxing/javase/3.5.2/javase-3.5.2.jar
+
+# INSTALL OpenJDK 17
+RUN apk add --no-cache openjdk17
+
+# COPY BUILT APPLICATION AND DEPENDENCIES
 COPY --from=builder --chown=tesseract:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=tesseract:nodejs /app/dist ./dist
 COPY --from=builder --chown=tesseract:nodejs /app/package*.json ./
 
-# Copy entrypoint script
+# COPY ENTRYPOINT SCRIPT
 COPY --chown=tesseract:nodejs docker/docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Create temp directory with proper ownership before switching user
+# CREATE TEMP DIRECTORY WITH PROPER OWNERSHIP BEFORE SWITCHING USER
 RUN mkdir -p /tmp/tesseract-api && \
     chown tesseract:nodejs /tmp/tesseract-api && \
     chmod 775 /tmp/tesseract-api
 
-# Switch to non-root user
+# SWITCH TO NON-ROOT USER
 USER tesseract
 
-# Expose port
+# EXPOSE PORT
 EXPOSE 8600
 
-# Optimized health check for Pi (less frequent to save resources)
+# OPTIMIZED HEALTH CHECK FOR PI (LESS FREQUENT TO SAVE RESOURCES)
 HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider --timeout=5 http://localhost:8600/ocr/status || exit 1
 
-# Set Node.js memory limit for Pi (adjust based on available RAM)
+# SET NODE.JS MEMORY LIMIT FOR PI (ADJUST BASED ON AVAILABLE RAM)
 ENV NODE_OPTIONS="--max-old-space-size=512"
 
-# Set entrypoint
+# SET ENTRYPOINT
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
-# Start application with Pi-optimized settings
+# START APPLICATION WITH PI-OPTIMIZED SETTINGS
 CMD ["node", "--max-old-space-size=512", "dist/main.js"]
