@@ -67,13 +67,13 @@ export class ZxingService {
     inputPath: string,
   ): Promise<DimensionData<DataContent>[]> {
     return new Promise((resolve, reject) => {
-      // USE ZXING WITH JSON OUTPUT FORMAT FOR STRUCTURED DATA
+      // USE `ZXingReader` (FROM `zxing-cpp` PACKAGE) WITH JSON OUTPUT FORMAT
       // --format JSON OUTPUTS STRUCTURED DATA WITH POSITION INFORMATION
       const args = ['--format', 'JSON', inputPath];
 
-      this._logger.debug(`Running ZXing with args: ${args.join(' ')}`);
+      this._logger.debug(`Running ZXingReader with args: ${args.join(' ')}`);
 
-      const zxing: ChildProcess = spawn('zxing', args);
+      const zxing: ChildProcess = spawn('ZXingReader', args);
 
       let stdout = '';
       let stderr = '';
@@ -197,7 +197,7 @@ export class ZxingService {
    */
   private async _checkZxingAvailability(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const zxing = spawn('zxing', ['--version']);
+      const zxing = spawn('ZXingReader', ['--version']);
 
       let versionOutput = '';
 
