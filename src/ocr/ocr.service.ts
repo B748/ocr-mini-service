@@ -1,14 +1,15 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Observable, Subject } from 'rxjs';
 import { TesseractService } from './tesseract.service';
+import { ZxingService } from './zxing.service';
 import { nanoid } from '../types/nanoid.function';
 import {
-  ReturnStrategy,
   JobStatus,
+  ReturnStrategy,
   WebhookPayload,
 } from '../types/return-strategy.types';
 import { response } from 'express';
-import axios from 'axios';
+import { OcrProcessResult } from '../types/ocr.types';
 
 interface MessageEvent {
   data: string;
@@ -21,7 +22,10 @@ export class OcrService {
   private _progressStreams = new Map<string, Subject<MessageEvent>>();
   private _jobStatuses = new Map<string, JobStatus>();
 
-  constructor(private readonly tesseractService: TesseractService) {}
+  constructor(
+    private readonly tesseractService: TesseractService,
+    private readonly zxingService: ZxingService,
+  ) {}
 
   /**
    * Checks if the OCR service is currently processing a request
@@ -106,11 +110,24 @@ export class OcrService {
     const progressSubject = this._progressStreams.get(jobId);
 
     try {
-      // PROCESS IMAGE WITH TESSERACT
-      const result = await this.tesseractService.processImage(buffer);
-      // const result = await this.tesseractService.dummyOcrProcessing()
+      // PROCESS IMAGE WITH BOTH TESSERACT AND ZXING IN PARALLEL
+      const [textResults, codeResults] = await Promise.all([
+        this.tesseractService.processImage(buffer),
+        this.zxingService.processImage(buffer).catch((error) => {
+          this._logger.warn(`ZXing processing failed: ${error.message}`);
+          return []; // CONTINUE EVEN IF ZXING FAILS
+        }),
+      ]);
 
-      this._logger.debug(`OCR-job done: ${jobId}`);
+      // COMBINE RESULTS
+      const result: OcrProcessResult = {
+        words: textResults,
+        codes: codeResults,
+      };
+
+      this._logger.debug(
+        `OCR-job done: ${jobId} (${textResults.length} words, ${codeResults.length} codes)`,
+      );
 
       // UPDATE JOB STATUS
       const jobStatus = this._jobStatuses.get(jobId);

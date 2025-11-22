@@ -35,11 +35,12 @@ RUN npm prune --production && \
 # Production stage
 FROM node:20-alpine AS production
 
-# Install Tesseract and language packs
+# Install Tesseract, ZXing, and language packs
 RUN apk add --no-cache \
     tesseract-ocr \
     tesseract-ocr-data-deu \
     tesseract-ocr-data-eng \
+    zxing-cpp \
     && rm -rf /var/cache/apk/*
 
 # Create app user for security

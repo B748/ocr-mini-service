@@ -151,6 +151,7 @@ cd scripts/test
 ## Features
 
 - **OCR Processing**: Text extraction using Tesseract OCR engine
+- **Barcode & QR Code Detection**: Automatic detection using ZXing-C++
 - **Progress Reporting**: Real-time updates via Server-Sent Events (SSE)
 - **Multi-language Support**: German and English language packs
 - **Container Ready**: Optimized Docker images for various architectures

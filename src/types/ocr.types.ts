@@ -18,3 +18,8 @@ export interface TextContent {
   text: string;
   confidence?: number;
 }
+
+export interface OcrProcessResult {
+  words: DimensionData<TextContent>[];
+  codes: DimensionData<DataContent>[];
+}

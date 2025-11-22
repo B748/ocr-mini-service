@@ -270,14 +270,12 @@ Get system debug information (development only).
 
 ### OCR Result Structure
 
-The complete OCR result follows a hierarchical structure:
+The complete OCR result includes text recognition and barcode/QR code detection:
 
 ```typescript
 interface OCRResult {
   words: DimensionData<TextContent>[];
-  lines: OCRHierarchyElement[];
-  paragraphs: OCRHierarchyElement[];
-  blocks: OCRHierarchyElement[];
+  codes: DimensionData<DataContent>[];
 }
 ```
 
@@ -308,18 +306,15 @@ interface TextContent {
 }
 ```
 
-### Hierarchy Elements
+### Data Content
 
-Lines, paragraphs, and blocks contain references to child elements:
+Barcodes and QR codes contain decoded content and type information:
 
 ```typescript
-interface OCRHierarchyElement extends DimensionData<StructureContent> {
-  childIds: string[];  // Array of child element IDs
-}
-
-interface StructureContent {
+interface DataContent {
   id: string;          // Unique identifier
-  type: 'H_BAR' | 'V_BAR' | 'IMAGE' | string;
+  content: string;     // Decoded content
+  type: 'QR_CODE' | 'BAR_CODE' | 'OTHER' | string;
 }
 ```
 
@@ -351,43 +346,28 @@ interface StructureContent {
       }
     }
   ],
-  "lines": [
+  "codes": [
     {
-      "left": 100,
-      "top": 50,
+      "left": 300,
+      "top": 100,
       "width": 150,
-      "height": 20,
+      "height": 150,
       "data": {
-        "id": "line-1-1-1",
-        "type": "H_BAR"
-      },
-      "childIds": ["word-1-1-1-1", "word-1-1-1-2"]
-    }
-  ],
-  "paragraphs": [
+        "id": "code-qr-1",
+        "content": "https://example.com",
+        "type": "QR_CODE"
+      }
+    },
     {
-      "left": 100,
-      "top": 50,
-      "width": 150,
-      "height": 20,
+      "left": 500,
+      "top": 100,
+      "width": 200,
+      "height": 80,
       "data": {
-        "id": "paragraph-1-1",
-        "type": "V_BAR"
-      },
-      "childIds": ["line-1-1-1"]
-    }
-  ],
-  "blocks": [
-    {
-      "left": 100,
-      "top": 50,
-      "width": 150,
-      "height": 20,
-      "data": {
-        "id": "block-1",
-        "type": "V_BAR"
-      },
-      "childIds": ["paragraph-1-1"]
+        "id": "code-bar-1",
+        "content": "1234567890123",
+        "type": "BAR_CODE"
+      }
     }
   ]
 }
