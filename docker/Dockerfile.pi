@@ -50,13 +50,6 @@ RUN addgroup -g 1001 -S nodejs && \
 
 WORKDIR /app
 
-# INSTALL OpenJDK 17 AND WGET
-RUN apk add --no-cache openjdk17 wget
-
-# ZXING DOWNLOAD FROM MAVEN (JAR WITH DEPENDENCIES)
-RUN mkdir -p /opt/zxing && \
-    wget -O /opt/zxing/zxing.jar https://repo1.maven.org/maven2/com/google/zxing/javase/3.5.2/javase-3.5.2-jar-with-dependencies.jar
-
 # COPY BUILT APPLICATION AND DEPENDENCIES
 COPY --from=builder --chown=tesseract:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=tesseract:nodejs /app/dist ./dist

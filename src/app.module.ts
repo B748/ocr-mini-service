@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
 import { CommonModule } from './common/common.module';
-import { OcrModule } from './ocr/ocr.module';
+import { ImageRecognitionModule } from './ocr/image-recognition.module';
 
 @Module({
-  imports: [CommonModule, OcrModule],
+  imports: [CommonModule, ImageRecognitionModule],
 })
 export class AppModule {}

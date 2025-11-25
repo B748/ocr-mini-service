@@ -2,7 +2,7 @@
 
 ## Overview
 
-The OCR microservice now includes automatic barcode and QR code detection using ZXing-C++ alongside Tesseract OCR text recognition. Both processes run in parallel for optimal performance.
+The OCR microservice includes automatic barcode and QR code detection using ZBar WASM alongside Tesseract OCR text recognition. Both processes run in parallel for optimal performance.
 
 ## Supported Code Types
 
@@ -16,7 +16,7 @@ The OCR microservice now includes automatic barcode and QR code detection using 
 When you submit an image for processing, the service automatically:
 
 1. Runs Tesseract OCR for text extraction
-2. Runs ZXing for barcode/QR code detection
+2. Runs ZBar for barcode/QR code detection
 3. Combines results into a single response
 
 Both processes run in parallel, so detection adds minimal overhead to processing time.
@@ -75,19 +75,11 @@ Bounding box coordinates are provided in pixels:
 
 ## Error Handling
 
-If ZXing fails to process an image (e.g., library not installed), the service continues with text OCR only. The `codes` array will be empty, but text recognition still works normally.
+If ZBar fails to process an image, the service continues with text OCR only. The `codes` array will be empty, but text recognition still works normally.
 
 ## Installation
 
-ZXing-C++ is automatically included in the Docker image via Alpine package:
-
-```dockerfile
-RUN apk add --no-cache \
-    tesseract-ocr \
-    tesseract-ocr-data-deu \
-    tesseract-ocr-data-eng \
-    zxing-cpp
-```
+ZBar WASM is automatically included as an npm dependency (`@undecaf/zbar-wasm`) and requires no external binaries or system packages.
 
 ## Use Cases
 

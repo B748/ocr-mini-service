@@ -1,7 +1,7 @@
 #!/bin/sh
 
-# DOCKER ENTRYPOINT SCRIPT FOR TESSERACT-API + ZXING
-# ENSURES PROPER PERMISSIONS, STARTS ZXING AND THE APPLICATION
+# DOCKER ENTRYPOINT SCRIPT FOR TESSERACT-API
+# ENSURES PROPER PERMISSIONS AND STARTS THE APPLICATION
 
 set -e
 
@@ -71,25 +71,12 @@ check_tesseract() {
     done
 }
 
-# START PERSISTENT ZXING PROCESS
-start_zxing() {
-    ZXING_JAR="/opt/zxing/zxing.jar"
-    if [ -f "$ZXING_JAR" ]; then
-        log "Starting persistent ZXing process..."
-        # RUNS IN BACKGROUND, NestJS CAN USE stdin/stdout
-        java -cp "$ZXING_JAR" com.google.zxing.client.j2se.CommandLineRunner &
-    else
-        log "ERROR: ZXing JAR not found at $ZXING_JAR"
-    fi
-}
-
 # MAIN SETUP
 main() {
     log "Starting Tesseract-API container setup..."
 
     setup_temp_directory
     check_tesseract
-    start_zxing
 
     log "Setup completed, starting application..."
 

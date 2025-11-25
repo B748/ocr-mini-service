@@ -1,415 +1,452 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { Observable, Subject } from 'rxjs';
-import { TesseractService } from './tesseract.service';
-import { ZxingService } from './zxing.service';
-import { nanoid } from '../types/nanoid.function';
-import {
-  JobStatus,
-  ReturnStrategy,
-  WebhookPayload,
-} from '../types/return-strategy.types';
-import { response } from 'express';
-import { OcrProcessResult } from '../types/ocr.types';
+import { Injectable, Logger } from '@nestjs/common';
+import { ChildProcess, spawn } from 'child_process';
 import { promises as fs } from 'fs';
 import { join } from 'path';
-
-interface MessageEvent {
-  data: string;
-}
+import { DimensionData, TextContent } from '../types/ocr.types';
+import { nanoid } from '../types/nanoid.function';
+import { parseTsvOutput } from '../types/ocr-response';
 
 @Injectable()
 export class OcrService {
   private readonly _logger = new Logger(OcrService.name);
-  private _processing = false;
-  private _progressStreams = new Map<string, Subject<MessageEvent>>();
-  private _jobStatuses = new Map<string, JobStatus>();
   private readonly _tempDir =
     process.env.TESSERACT_TEMP_DIR || '/tmp/tesseract-api';
 
-  constructor(
-    private readonly tesseractService: TesseractService,
-    private readonly zxingService: ZxingService,
-  ) {}
-
-  /**
-   * Checks if the OCR service is currently processing a request
-   * @returns True if processing is in progress, false otherwise
-   */
-  isProcessing(): boolean {
-    return this._processing;
+  constructor() {
+    void this._ensureTempDir();
   }
 
   /**
-   * Starts OCR processing on a buffer with specified return strategy
-   * @param buffer - Image buffer to process
-   * @param returnStrategy - How to return results: 'sse', 'webhook', or 'polling'
-   * @param webhookUrl - Optional webhook URL for webhook strategy
-   * @param callbackHeaders - Optional headers for webhook callbacks
-   * @returns Promise resolving to unique job ID
-   */
-  async startOcrProcessOnBuffer(
-    buffer: Buffer,
-    returnStrategy: ReturnStrategy = 'sse',
-    webhookUrl?: string,
-    callbackHeaders?: Record<string, string>,
-  ): Promise<string> {
-    this._logger.debug('Starting OCR process...');
-    const jobId = nanoid();
-
-    // INITIALIZE JOB STATUS
-    const jobStatus: JobStatus = {
-      jobId,
-      status: 'processing',
-      createdAt: new Date(),
-    };
-    this._jobStatuses.set(jobId, jobStatus);
-
-    // SETUP SSE STREAM IF NEEDED
-    if (returnStrategy === 'sse') {
-      const progressSubject = new Subject<MessageEvent>();
-      this._progressStreams.set(jobId, progressSubject);
-    }
-
-    this._processing = true;
-
-    // START OCR PROCESSING IN BACKGROUND
-    void this._processOcrAsync(
-      jobId,
-      buffer,
-      returnStrategy,
-      webhookUrl,
-      callbackHeaders,
-    );
-
-    this._logger.debug(
-      `OCR-job created: ${jobId} with strategy: ${returnStrategy}`,
-    );
-    return jobId;
-  }
-
-  /**
-   * Gets debug information from the Tesseract service
-   * @returns Debug information including system state and configuration
+   * Gets comprehensive debug information about the Tesseract service
+   * @returns Debug information including temp directory, process info, Tesseract version, and system details
    */
   async getDebugInfo() {
-    return this.tesseractService.getDebugInfo();
-  }
-
-  /**
-   * Writes image buffer to a temporary file
-   * @param imageBuffer - The image data to write
-   * @param inputPath - Path where the file should be written
-   * @returns Promise that resolves when file is written successfully
-   * @throws {Error} When file cannot be written to temp directory
-   * @private
-   */
-  private async _writeBufferToTempFile(
-    imageBuffer: Buffer,
-    inputPath: string,
-  ): Promise<void> {
-    try {
-      await fs.writeFile(inputPath, imageBuffer);
-      this._logger.debug(
-        `Created input file: ${inputPath} (${imageBuffer.length} bytes)`,
-      );
-    } catch (writeError: any) {
-      this._logger.error(
-        `Failed to write input file to ${inputPath}:`,
-        writeError,
-      );
-
-      // CHECK DIRECTORY PERMISSIONS
-      try {
-        const stats = await fs.stat(this._tempDir);
-        this._logger.error(
-          `Temp directory permissions: ${stats.mode.toString(8)}`,
-        );
-      } catch (statError) {
-        this._logger.error(`Cannot stat temp directory: ${statError.message}`);
-      }
-
-      throw new Error(`Cannot write to temp directory: ${writeError.message}`);
-    }
-  }
-
-  /**
-   * Processes OCR asynchronously and handles different return strategies
-   * @param jobId - Unique job identifier
-   * @param buffer - Image buffer to process
-   * @param returnStrategy - How to return results
-   * @param webhookUrl - Optional webhook URL
-   * @param callbackHeaders - Optional webhook headers
-   * @private
-   */
-  private async _processOcrAsync(
-    jobId: string,
-    buffer: Buffer,
-    returnStrategy: ReturnStrategy,
-    webhookUrl?: string,
-    callbackHeaders?: Record<string, string>,
-  ) {
-    const progressSubject = this._progressStreams.get(jobId);
-    const inputPath = join(this._tempDir, `input_${jobId}.png`);
+    const { promises: fs } = require('fs');
 
     try {
-      // WRITE BUFFER TO TEMP FILE
-      await this._writeBufferToTempFile(buffer, inputPath);
+      // CHECK TEMP DIRECTORY
+      const tempDirExists = await fs
+        .access(this._tempDir)
+        .then(() => true)
+        .catch(() => false);
+      let tempDirContents = [];
+      let tempDirStats = null;
+      let writeTest = null;
 
-      // PROCESS IMAGE WITH BOTH TESSERACT AND ZXING IN PARALLEL
-      const [textResults, codeResults] = await Promise.all([
-        this.tesseractService.processImage(inputPath),
-        this.zxingService.scan(inputPath).catch((error) => {
-          this._logger.warn(`ZXing processing failed: ${error.message}`);
-          return []; // CONTINUE EVEN IF ZXING FAILS
-        }),
-      ]);
+      if (tempDirExists) {
+        try {
+          tempDirContents = await fs.readdir(this._tempDir);
+          tempDirStats = await fs.stat(this._tempDir);
 
-      console.log(codeResults);
-
-      // COMBINE RESULTS
-      const result: OcrProcessResult = {
-        words: textResults,
-        codes: [],
-      };
-
-      this._logger.debug(
-        `OCR-job done: ${jobId} (${textResults.length} words, ${codeResults.length} codes)`,
-      );
-
-      // UPDATE JOB STATUS
-      const jobStatus = this._jobStatuses.get(jobId);
-      if (jobStatus) {
-        jobStatus.status = 'completed';
-        jobStatus.result = result;
-        jobStatus.completedAt = new Date();
-      }
-
-      // HANDLE DIFFERENT RETURN STRATEGIES
-      await this._handleCompletion(
-        jobId,
-        returnStrategy,
-        result,
-        webhookUrl,
-        callbackHeaders,
-        progressSubject,
-      );
-    } catch (error) {
-      this._logger.error(`OCR-job failed: ${jobId}`, error);
-
-      // UPDATE JOB STATUS
-      const jobStatus = this._jobStatuses.get(jobId);
-      if (jobStatus) {
-        jobStatus.status = 'failed';
-        jobStatus.error = error.message || 'OCR processing failed';
-        jobStatus.completedAt = new Date();
-      }
-
-      // HANDLE DIFFERENT RETURN STRATEGIES FOR ERRORS
-      await this._handleError(
-        jobId,
-        returnStrategy,
-        error.message || 'OCR processing failed',
-        webhookUrl,
-        callbackHeaders,
-        progressSubject,
-      );
-    } finally {
-      this._processing = false;
-      if (progressSubject) {
-        progressSubject.complete();
-      }
-
-      // CLEANUP INPUT FILE
-      try {
-        await fs.unlink(inputPath);
-        this._logger.debug(`Cleaned up input file: ${inputPath}`);
-      } catch (error: any) {
-        if (error.code !== 'ENOENT') {
-          this._logger.warn(
-            `Failed to cleanup input file ${inputPath}: ${error.message}`,
-          );
+          // TEST WRITE PERMISSIONS
+          const testFile = join(this._tempDir, 'debug-write-test');
+          try {
+            await fs.writeFile(testFile, 'test');
+            await fs.unlink(testFile);
+            writeTest = 'success';
+          } catch (writeError: any) {
+            writeTest = `failed: ${writeError.message}`;
+          }
+        } catch (error: any) {
+          tempDirContents = [`Error reading directory: ${error.message}`];
         }
       }
-    }
-  }
 
-  /**
-   * Sends data through Server-Sent Events stream
-   * @param progressSubject - The SSE subject to send data through
-   * @param data - Data to send via SSE
-   * @private
-   */
-  private _sendSse(progressSubject: Subject<MessageEvent>, data: unknown) {
-    progressSubject.next({ data: JSON.stringify(data) });
-  }
+      // CHECK TESSERACT VERSION
+      const tesseractVersion = await this._getTesseractVersion();
 
-  /**
-   * Gets the progress stream for a specific job
-   * @param jobId - The unique job identifier
-   * @returns Observable stream of progress events
-   * @throws {NotFoundException} When job ID is not found
-   */
-  getProgressStream(jobId: string): Observable<MessageEvent> {
-    const progressSubject = this._progressStreams.get(jobId);
-    if (!progressSubject) {
-      throw new NotFoundException(`Job ${jobId} not found`);
-    }
-    return progressSubject.asObservable();
-  }
+      // CHECK AVAILABLE LANGUAGES
+      const availableLanguages = await this._getAvailableLanguages();
 
-  /**
-   * Gets the current status of a specific job
-   * @param jobId - The unique job identifier
-   * @returns Current job status information
-   * @throws {NotFoundException} When job ID is not found
-   */
-  getJobStatus(jobId: string): JobStatus {
-    const jobStatus = this._jobStatuses.get(jobId);
-    if (!jobStatus) {
-      throw new NotFoundException(`Job ${jobId} not found`);
-    }
-    return jobStatus;
-  }
-
-  /**
-   * Handles successful completion of OCR processing based on return strategy
-   * @param jobId - The unique job identifier
-   * @param returnStrategy - How to return results
-   * @param result - The OCR processing result
-   * @param webhookUrl - Optional webhook URL
-   * @param callbackHeaders - Optional webhook headers
-   * @param progressSubject - Optional SSE subject
-   * @private
-   */
-  private async _handleCompletion(
-    jobId: string,
-    returnStrategy: ReturnStrategy,
-    result: any,
-    webhookUrl?: string,
-    callbackHeaders?: Record<string, string>,
-    progressSubject?: Subject<MessageEvent>,
-  ) {
-    switch (returnStrategy) {
-      case 'sse':
-        if (progressSubject) {
-          this._sendSse(progressSubject, {
-            type: 'complete',
-            result,
-          });
-        }
-        break;
-      case 'webhook':
-        if (webhookUrl) {
-          await this._sendWebhook(
-            jobId,
-            'completed',
-            webhookUrl,
-            callbackHeaders,
-            result,
-          );
-        }
-        break;
-      case 'polling':
-        // STATUS IS ALREADY UPDATED IN JOB STATUS MAP
-        this._logger.debug(`Job ${jobId} completed, available for polling`);
-        break;
-    }
-  }
-
-  /**
-   * Handles OCR processing errors based on return strategy
-   * @param jobId - The unique job identifier
-   * @param returnStrategy - How to return results
-   * @param error - The error message
-   * @param webhookUrl - Optional webhook URL
-   * @param callbackHeaders - Optional webhook headers
-   * @param progressSubject - Optional SSE subject
-   * @private
-   */
-  private async _handleError(
-    jobId: string,
-    returnStrategy: ReturnStrategy,
-    error: string,
-    webhookUrl?: string,
-    callbackHeaders?: Record<string, string>,
-    progressSubject?: Subject<MessageEvent>,
-  ) {
-    switch (returnStrategy) {
-      case 'sse':
-        if (progressSubject) {
-          this._sendSse(progressSubject, {
-            type: 'error',
-            error,
-          });
-        }
-        break;
-
-      case 'webhook':
-        if (webhookUrl) {
-          await this._sendWebhook(
-            jobId,
-            'failed',
-            webhookUrl,
-            callbackHeaders,
-            undefined,
-            error,
-          );
-        }
-        break;
-
-      case 'polling':
-        // STATUS IS ALREADY UPDATED IN JOB STATUS MAP
-        this._logger.debug(`Job ${jobId} failed, available for polling`);
-        break;
-    }
-  }
-
-  /**
-   * Sends webhook notification for job completion or failure
-   * @param jobId - The unique job identifier
-   * @param status - Job completion status
-   * @param webhookUrl - Target webhook URL
-   * @param headers - Optional custom headers
-   * @param result - Optional result data for completed jobs
-   * @param error - Optional error message for failed jobs
-   * @private
-   */
-  private async _sendWebhook(
-    jobId: string,
-    status: 'completed' | 'failed',
-    webhookUrl: string,
-    headers?: Record<string, string>,
-    result?: any,
-    error?: string,
-  ) {
-    try {
-      const payload: WebhookPayload = {
-        jobId,
-        status,
-        result,
-        error,
-        timestamp: new Date(),
-      };
-
-      const response = await fetch(`${webhookUrl}/${jobId}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...headers,
+      return {
+        tempDirectory: {
+          path: this._tempDir,
+          exists: tempDirExists,
+          contents: tempDirContents,
+          permissions: tempDirStats ? tempDirStats.mode.toString(8) : null,
+          owner: tempDirStats
+            ? { uid: tempDirStats.uid, gid: tempDirStats.gid }
+            : null,
+          writeTest: writeTest,
         },
-        body: JSON.stringify(payload),
+        process: {
+          uid: process.getuid ? process.getuid() : 'not available',
+          gid: process.getgid ? process.getgid() : 'not available',
+          cwd: process.cwd(),
+        },
+        tesseract: {
+          version: tesseractVersion,
+          availableLanguages,
+        },
+        system: {
+          nodeVersion: process.version,
+          platform: process.platform,
+          arch: process.arch,
+        },
+      };
+    } catch (error) {
+      return {
+        error: `Debug info collection failed: ${error.message}`,
+      };
+    }
+  }
+
+  /**
+   * Ensures the temporary directory exists and is writable
+   * @private
+   */
+  private async _ensureTempDir() {
+    try {
+      // TRY TO CREATE THE DIRECTORY
+      await fs.mkdir(this._tempDir, { recursive: true });
+
+      // TEST WRITE PERMISSIONS BY CREATING A TEST FILE
+      const testFile = join(this._tempDir, 'test-write-permissions');
+      await fs.writeFile(testFile, 'test');
+      await fs.unlink(testFile);
+
+      this._logger.debug(`Temp directory ready: ${this._tempDir}`);
+    } catch (error: any) {
+      this._logger.error(
+        `Failed to setup temp directory ${this._tempDir}:`,
+        error,
+      );
+
+      // TRY ALTERNATIVE TEMP DIRECTORIES
+      const alternatives = [
+        '/tmp/ocr-temp',
+        '/var/tmp/tesseract-api',
+        process.env.TMPDIR || '/tmp',
+      ];
+
+      for (const altDir of alternatives) {
+        try {
+          await fs.mkdir(altDir, { recursive: true });
+          const testFile = join(altDir, 'test-write-permissions');
+          await fs.writeFile(testFile, 'test');
+          await fs.unlink(testFile);
+
+          this._logger.warn(`Using alternative temp directory: ${altDir}`);
+          (this as any)._tempDir = altDir; // UPDATE THE TEMP DIRECTORY
+          return;
+        } catch (altError) {
+          this._logger.debug(
+            `Alternative temp directory ${altDir} also failed:`,
+            altError,
+          );
+        }
+      }
+
+      throw new Error(
+        `No writable temp directory found. Last error: ${error.message}`,
+      );
+    }
+  }
+
+  /**
+   * Processes an image file using Tesseract OCR
+   * @param inputPath - Path to the input image file
+   * @returns Promise resolving to array of OCR results with text and bounding boxes
+   * @throws {Error} When OCR processing fails
+   */
+  async processImage(inputPath: string): Promise<DimensionData<TextContent>[]> {
+    // CHECK IF TESSERACT IS AVAILABLE
+    await this._checkTesseractAvailability();
+    const jobId = nanoid();
+    const outputBasePath = join(this._tempDir, `output_${jobId}`);
+    const tsvOutputPath = `${outputBasePath}.tsv`;
+
+    // TRACK WHICH FILES WERE ACTUALLY CREATED
+    const createdFiles: string[] = [];
+
+    try {
+      // RUN TESSERACT WITH TSV OUTPUT FOR DETAILED WORD-LEVEL DATA
+      await this._runTesseract(inputPath, outputBasePath);
+
+      // CHECK IF TSV OUTPUT WAS CREATED
+      try {
+        await fs.access(tsvOutputPath);
+        createdFiles.push(tsvOutputPath);
+        this._logger.debug(`Tesseract created output file: ${tsvOutputPath}`);
+      } catch {
+        this._logger.warn(
+          `Tesseract did not create expected output file: ${tsvOutputPath}`,
+        );
+      }
+
+      // PARSE TSV OUTPUT TO OUR DATA MODEL
+      const result = await this._parseTsvOutput(tsvOutputPath);
+
+      // ADD A SMALL DELAY TO SHOW THE FINAL PROGRESS STEP
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      return result;
+    } catch (error) {
+      this._logger.error(`OCR processing failed for job ${jobId}:`, error);
+      throw error;
+    } finally {
+      // CLEAN UP ONLY FILES THAT WERE ACTUALLY CREATED
+      if (createdFiles.length > 0) {
+        await this._cleanupFiles(createdFiles);
+      } else {
+        this._logger.debug(`No files to cleanup for job ${jobId}`);
+      }
+    }
+  }
+
+  /**
+   * Runs Tesseract OCR process on an input image file
+   * @param inputPath - Path to the input image file
+   * @param outputBasePath - Base path for output files (without extension)
+   * @returns Promise that resolves when Tesseract processing completes
+   * @throws {Error} When Tesseract process fails
+   * @private
+   */
+  private async _runTesseract(
+    inputPath: string,
+    outputBasePath: string,
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      // USE TSV OUTPUT FORMAT FOR DETAILED WORD-LEVEL INFORMATION
+      // -L DEU+ENG FOR GERMAN AND ENGLISH
+      const args = [inputPath, outputBasePath, '-l', 'deu+eng', 'tsv'];
+
+      this._logger.debug(`Running Tesseract with args: ${args.join(' ')}`);
+
+      const tesseract: ChildProcess = spawn('tesseract', args);
+
+      let stderr = '';
+      let stdout = '';
+
+      tesseract.stdout?.on('data', (data) => {
+        stdout += data.toString();
       });
 
-      if (!response.ok) {
-        this._logger.warn(
-          `Webhook failed "${webhookUrl}/${jobId}": ${response.status} ${response.statusText}`,
-        );
-      } else {
-        this._logger.debug(`Webhook sent successfully for job ${jobId}`);
+      tesseract.stderr?.on('data', (data) => {
+        const chunk = data.toString();
+        stderr += chunk;
+
+        // LOG TESSERACT OUTPUT FOR DEBUGGING
+        this._logger.debug(`Tesseract stderr: ${chunk.trim()}`);
+      });
+
+      tesseract.on('close', (code) => {
+        this._logger.debug(`Tesseract process closed with code: ${code}`);
+        if (stdout) this._logger.debug(`Tesseract stdout: ${stdout}`);
+
+        if (code === 0) {
+          resolve();
+        } else {
+          const errorMsg = `Tesseract failed with exit code ${code}. stderr: ${stderr}`;
+          this._logger.error(errorMsg);
+          reject(new Error(errorMsg));
+        }
+      });
+
+      tesseract.on('error', (error) => {
+        const errorMsg = `Failed to start Tesseract process: ${error.message}`;
+        this._logger.error(errorMsg);
+        reject(new Error(errorMsg));
+      });
+    });
+  }
+
+  /**
+   * Parses Tesseract TSV output file into structured OCR data
+   * @param tsvPath - Path to the TSV output file from Tesseract
+   * @returns Promise resolving to array of OCR results with text and bounding boxes
+   * @throws {Error} When TSV file cannot be read or parsed
+   * @private
+   */
+  private async _parseTsvOutput(
+    tsvPath: string,
+  ): Promise<DimensionData<TextContent>[]> {
+    try {
+      // CHECK IF FILE EXISTS AND GET ITS SIZE
+      const stats = await fs.stat(tsvPath);
+      this._logger.debug(`TSV file size: ${stats.size} bytes`);
+
+      if (stats.size === 0) {
+        this._logger.warn('TSV file is empty - no text detected in image');
+        return [];
       }
+
+      const tsvContent = await fs.readFile(tsvPath, 'utf-8');
+      const lines = tsvContent.trim().split('\n');
+
+      this._logger.debug(`TSV file has ${lines.length} lines`);
+
+      if (lines.length < 2) {
+        this._logger.warn(
+          'TSV file has insufficient data - likely no text detected',
+        );
+        return [];
+      }
+
+      return parseTsvOutput(lines);
     } catch (error) {
-      console.log(response.statusCode);
-      this._logger.error(`Webhook failed "${webhookUrl}/${jobId}":`, error);
+      this._logger.error('Failed to parse TSV output', error);
+      throw new Error(`Failed to parse OCR results: ${error.message}`);
     }
+  }
+
+  /**
+   * Cleans up temporary files created during OCR processing
+   * @param filePaths - Array of file paths to delete
+   * @private
+   */
+  private async _cleanupFiles(filePaths: string[]) {
+    for (const filePath of filePaths) {
+      try {
+        // CHECK IF FILE EXISTS BEFORE TRYING TO DELETE
+        await fs.access(filePath);
+        await fs.unlink(filePath);
+        this._logger.debug(`Successfully cleaned up file: ${filePath}`);
+      } catch (error: any) {
+        if (error.code === 'ENOENT') {
+          this._logger.debug(
+            `File already removed or never existed: ${filePath}`,
+          );
+        } else {
+          this._logger.warn(
+            `Failed to cleanup file ${filePath}: ${error.message}`,
+          );
+        }
+      }
+    }
+  }
+
+  /**
+   * Gets the Tesseract version information
+   * @returns Promise resolving to version string
+   * @private
+   */
+  private async _getTesseractVersion(): Promise<string> {
+    return new Promise((resolve) => {
+      const tesseract = spawn('tesseract', ['--version']);
+      let output = '';
+
+      tesseract.stdout?.on('data', (data) => {
+        output += data.toString();
+      });
+
+      tesseract.stderr?.on('data', (data) => {
+        output += data.toString();
+      });
+
+      tesseract.on('close', () => {
+        resolve(output.trim() || 'Version info not available');
+      });
+
+      tesseract.on('error', (error) => {
+        resolve(`Error getting version: ${error.message}`);
+      });
+    });
+  }
+
+  /**
+   * Gets the list of available Tesseract languages
+   * @returns Promise resolving to array of language codes
+   * @private
+   */
+  private async _getAvailableLanguages(): Promise<string[]> {
+    return new Promise((resolve) => {
+      const tesseract = spawn('tesseract', ['--list-langs']);
+      let output = '';
+
+      tesseract.stdout?.on('data', (data) => {
+        output += data.toString();
+      });
+
+      tesseract.on('close', () => {
+        const lines = output.trim().split('\n');
+        // SKIP THE FIRST LINE WHICH IS USUALLY "List of available languages (X):"
+        const languages = lines.slice(1).filter((line) => line.trim());
+        resolve(languages);
+      });
+
+      tesseract.on('error', (error) => {
+        resolve([`Error getting languages: ${error.message}`]);
+      });
+    });
+  }
+
+  /**
+   * Dummy OCR processing function that simulates OCR processing
+   * Pauses for 7 seconds then returns a successful mock result
+   */
+  async dummyOcrProcessing(): Promise<DimensionData<TextContent>[]> {
+    this._logger.warn('<< !! DUMMY OCR PROCESSING !! >>');
+
+    // SIMULATE 7-SECOND PROCESSING TIME
+    await new Promise(resolve => setTimeout(resolve, 7000));
+
+    // RETURN MOCK SUCCESSFUL OCR RESULT
+    const mockResult: DimensionData<TextContent>[] = [
+      {
+        left: 100,
+        top: 50,
+        width: 200,
+        height: 30,
+        data: {
+          id: nanoid(),
+          text: 'Sample',
+          confidence: 95
+        }
+      },
+      {
+        left: 320,
+        top: 50,
+        width: 150,
+        height: 30,
+        data: {
+          id: nanoid(),
+          text: 'OCR',
+          confidence: 98
+        }
+      },
+      {
+        left: 490,
+        top: 50,
+        width: 180,
+        height: 30,
+        data: {
+          id: nanoid(),
+          text: 'Result',
+          confidence: 92
+        }
+      }
+    ];
+
+    this._logger.debug('Dummy OCR processing completed successfully');
+    return mockResult;
+  }
+
+  /**
+   * Checks if Tesseract OCR is available and properly installed
+   * @returns Promise that resolves if Tesseract is available
+   * @throws {Error} When Tesseract is not available or not properly installed
+   * @private
+   */
+  private async _checkTesseractAvailability(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const tesseract = spawn('tesseract', ['--version']);
+
+      tesseract.on('close', (code) => {
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(
+            new Error(
+              'Tesseract OCR is not available or not properly installed',
+            ),
+          );
+        }
+      });
+
+      tesseract.on('error', (error) => {
+        reject(new Error(`Tesseract OCR is not available: ${error.message}`));
+      });
+    });
   }
 }

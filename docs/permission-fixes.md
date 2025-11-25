@@ -6,7 +6,7 @@ The container was experiencing permission issues where the `/tmp/tesseract-api` 
 
 ## Root Cause
 
-1. **Directory Creation Timing**: The `TesseractService` constructor calls `fs.mkdir()` during application startup, which could happen before proper user switching
+1. **Directory Creation Timing**: The `OcrService` constructor calls `fs.mkdir()` during application startup, which could happen before proper user switching
 2. **Docker Layer Ordering**: The temp directory was being created after switching to the non-root user, but something was recreating it as root
 3. **Entrypoint Script Limitations**: The entrypoint script couldn't fix permissions when running as non-root user
 

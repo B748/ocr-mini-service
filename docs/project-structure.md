@@ -14,10 +14,10 @@ tesseract-api/
 │   └── steering/              # AI guidance and project rules
 ├── src/                       # NestJS application source code
 │   ├── ocr/                   # OCR module (controllers, services)
-│   │   ├── ocr.controller.ts  # REST API endpoints
+│   │   ├── image-recognition.controller.ts  # REST API endpoints
 │   │   ├── ocr.service.ts     # Business logic and orchestration
-│   │   ├── ocr.module.ts      # NestJS module definition
-│   │   └── tesseract.service.ts # Tesseract OCR engine integration
+│   │   ├── image-recognition.module.ts      # NestJS module definition
+│   │   └── ocr.service.ts # Tesseract OCR engine integration
 │   ├── types/                 # TypeScript type definitions
 │   │   └── ocr.types.ts       # OCR data interfaces and types
 │   ├── app.module.ts          # Main application module
@@ -90,8 +90,8 @@ The application follows NestJS modular architecture:
 
 #### TypeScript/JavaScript Files
 - **camelCase** for files: `ocrController.ts`, `tesseractService.ts`
-- **PascalCase** for classes: `OcrController`, `TesseractService`
-- **kebab-case** for modules: `ocr.module.ts`, `app.module.ts`
+- **PascalCase** for classes: `ImageRecognitionController`, `OcrService`
+- **kebab-case** for modules: `image-recognition.module.ts`, `app.module.ts`
 
 #### Scripts and Configuration
 - **kebab-case** for scripts: `test-deployment.sh`, `create-package.sh`
@@ -115,18 +115,18 @@ The application follows NestJS modular architecture:
 The core OCR functionality is encapsulated in a self-contained NestJS module:
 
 ```typescript
-// ocr.module.ts - Module definition
+// image-recognition.module.ts - Module definition
 @Module({
-  controllers: [OcrController],
-  providers: [OcrService, TesseractService],
+  controllers: [ImageRecognitionController],
+  providers: [OcrService, OcrService],
 })
-export class OcrModule {}
+export class ImageRecognitionModule {}
 ```
 
 **Components:**
-- **Controller** (`ocr.controller.ts`) - HTTP endpoints and request handling
+- **Controller** (`image-recognition.controller.ts`) - HTTP endpoints and request handling
 - **Service** (`ocr.service.ts`) - Business logic and orchestration
-- **Tesseract Service** (`tesseract.service.ts`) - OCR engine integration
+- **Tesseract Service** (`ocr.service.ts`) - OCR engine integration
 
 #### Types Module (`src/types/`)
 Centralized type definitions for consistent data structures:

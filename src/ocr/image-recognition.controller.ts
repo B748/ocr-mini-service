@@ -17,7 +17,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { VersionService } from '../common/version.service';
-import { OcrService } from './ocr.service';
+import { ImageRecognitionService } from './image-recognition.service';
 import { Express } from 'express';
 import 'multer';
 import { Observable } from 'rxjs';
@@ -25,11 +25,11 @@ import { ReturnStrategy } from '../types/return-strategy.types';
 import { Request } from 'express';
 
 @Controller('ocr')
-export class OcrController {
-  private _logger = new Logger(OcrController.name);
+export class ImageRecognitionController {
+  private _logger = new Logger(ImageRecognitionController.name);
 
   constructor(
-    private readonly _ocrService: OcrService,
+    private readonly _ocrService: ImageRecognitionService,
     private readonly _versionService: VersionService,
   ) {}
 
@@ -119,7 +119,7 @@ export class OcrController {
       );
     }
 
-    const jobId = await this._ocrService.startOcrProcessOnBuffer(
+    const jobId = await this._ocrService.startImageRecognitionOnBuffer(
       file.buffer,
       parsedBody.returnStrategy,
       parsedBody.webhookUrl,
@@ -173,7 +173,7 @@ export class OcrController {
     const fullWebhookUrl = body.options.webhookUrl ?
       `${req.protocol}://${req.ip}${body.options.webhookUrl}` : '';
 
-    return this._ocrService.startOcrProcessOnBuffer(
+    return this._ocrService.startImageRecognitionOnBuffer(
       buffer,
       options.returnStrategy,
       fullWebhookUrl,
