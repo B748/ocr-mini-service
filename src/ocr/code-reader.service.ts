@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { scanImageData, ZBarSymbol } from '@undecaf/zbar-wasm';
-import { promises as fs } from 'fs';
+import Jimp from 'jimp';
 
 @Injectable()
 export class CodeReaderService {
@@ -17,11 +17,18 @@ export class CodeReaderService {
    */
   async scan(filePath: string): Promise<ZBarSymbol[]> {
     try {
-      // READ IMAGE FILE AS BUFFER
-      const imageBuffer = await fs.readFile(filePath);
+      // READ AND DECODE IMAGE WITH JIMP
+      const image = await Jimp.read(filePath);
+      
+      // CONVERT TO IMAGEDATA FORMAT EXPECTED BY ZBAR
+      const imageData = {
+        data: new Uint8ClampedArray(image.bitmap.data),
+        width: image.bitmap.width,
+        height: image.bitmap.height,
+      };
 
       // SCAN IMAGE WITH ZBAR WASM
-      const symbols = await scanImageData(imageBuffer);
+      const symbols = await scanImageData(imageData);
 
       this._logger.debug(
         `ZBar scan completed: found ${symbols.length} symbols`,
