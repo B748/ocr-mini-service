@@ -4,7 +4,7 @@ import { promises as fs } from 'fs';
 import { join } from 'path';
 import { DimensionData, TextContent } from '../types/ocr.types';
 import { nanoid } from '../types/nanoid.function';
-import { parseTsvOutput } from '../types/ocr-response';
+import { parseTsvOutput } from '../types/parse-tsv-output.function';
 
 @Injectable()
 export class OcrService {

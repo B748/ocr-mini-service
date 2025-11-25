@@ -9,7 +9,7 @@ import {
   WebhookPayload,
 } from '../types/return-strategy.types';
 import { response } from 'express';
-import { OcrProcessResult } from '../types/ocr.types';
+import { OcrProcessResult, DimensionData, TextContent, DataContent } from '../types/ocr.types';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 
@@ -156,51 +156,28 @@ export class ImageRecognitionService {
       await this._writeBufferToTempFile(buffer, inputPath);
 
       // PROCESS IMAGE WITH BOTH TESSERACT AND ZBAR IN PARALLEL
-      const [textResults, codeResults] = await Promise.all([
-        this.tesseractService.processImage(inputPath),
-        this.codeReaderService.scan(inputPath).catch((error) => {
+      const [textResults, codes] = await Promise.all([
+        this.tesseractService.processImage(inputPath).catch((error) => {
+          this._logger.warn(`OCR processing failed: ${error.message}`);
+          return []; // CONTINUE EVEN IF OCR FAILS
+        }),
+        this.codeReaderService.processImage(inputPath).catch((error) => {
           this._logger.warn(`ZBar processing failed: ${error.message}`);
           return []; // CONTINUE EVEN IF ZBAR FAILS
         }),
       ]);
 
-      // CONVERT ZBAR RESULTS TO EXPECTED FORMAT
-      const codes = codeResults.map((symbol) => {
-        const points = symbol.points || [];
-        const xs = points.map((p) => p.x);
-        const ys = points.map((p) => p.y);
-        const left = Math.min(...xs);
-        const top = Math.min(...ys);
-        const width = Math.max(...xs) - left;
-        const height = Math.max(...ys) - top;
-
-        // CONVERT Int8Array TO STRING
-        const content =
-          typeof symbol.data === 'string'
-            ? symbol.data
-            : new TextDecoder().decode(symbol.data);
-
-        return {
-          left,
-          top,
-          width,
-          height,
-          data: {
-            id: `code_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            content,
-            type: symbol.typeName.toUpperCase(),
-          },
-        };
-      });
+      // FILTER OUT OCR TEXT THAT OVERLAPS WITH DETECTED CODES
+      const filteredTextResults = this._filterOverlappingText(textResults, codes);
 
       // COMBINE RESULTS
       const result: OcrProcessResult = {
-        words: textResults,
+        words: filteredTextResults,
         codes,
       };
 
       this._logger.debug(
-        `OCR-job done: ${jobId} (${textResults.length} words, ${codeResults.length} codes)`,
+        `OCR-job done: ${jobId} (${filteredTextResults.length}/${textResults.length} words, ${codes.length} codes)`,
       );
 
       // UPDATE JOB STATUS
@@ -258,6 +235,65 @@ export class ImageRecognitionService {
         }
       }
     }
+  }
+
+  /**
+   * Filters out OCR text results that overlap with detected codes
+   * @param textResults - Array of OCR text results
+   * @param codes - Array of detected codes (barcodes/QR codes)
+   * @returns Filtered array of text results with overlapping text removed
+   * @private
+   */
+  private _filterOverlappingText(
+    textResults: DimensionData<TextContent>[],
+    codes: DimensionData<DataContent>[],
+  ): DimensionData<TextContent>[] {
+    if (codes.length === 0) {
+      return textResults; // NO CODES DETECTED, RETURN ALL TEXT
+    }
+
+    const filteredResults = textResults.filter((textResult) => {
+      // CHECK IF THIS TEXT OVERLAPS WITH ANY CODE
+      const overlapsWithCode = codes.some((code) =>
+        this._rectanglesOverlap(textResult, code),
+      );
+      return !overlapsWithCode; // KEEP TEXT THAT DOESN'T OVERLAP
+    });
+
+    const removedCount = textResults.length - filteredResults.length;
+    if (removedCount > 0) {
+      this._logger.debug(
+        `Filtered out ${removedCount} OCR text results that overlapped with codes`,
+      );
+    }
+
+    return filteredResults;
+  }
+
+  /**
+   * Checks if two rectangles overlap
+   * @param rect1 - First rectangle with normalized coordinates (0-1)
+   * @param rect2 - Second rectangle with normalized coordinates (0-1)
+   * @returns True if rectangles overlap, false otherwise
+   * @private
+   */
+  private _rectanglesOverlap(
+    rect1: DimensionData<any>,
+    rect2: DimensionData<any>,
+  ): boolean {
+    const rect1Right = rect1.left + rect1.width;
+    const rect1Bottom = rect1.top + rect1.height;
+    const rect2Right = rect2.left + rect2.width;
+    const rect2Bottom = rect2.top + rect2.height;
+
+    // RECTANGLES DON'T OVERLAP IF ONE IS COMPLETELY TO THE LEFT, RIGHT, ABOVE, OR BELOW THE OTHER
+    const noOverlap =
+      rect1Right <= rect2.left || // RECT1 IS TO THE LEFT OF RECT2
+      rect2Right <= rect1.left || // RECT2 IS TO THE LEFT OF RECT1
+      rect1Bottom <= rect2.top || // RECT1 IS ABOVE RECT2
+      rect2Bottom <= rect1.top; // RECT2 IS ABOVE RECT1
+
+    return !noOverlap;
   }
 
   /**
