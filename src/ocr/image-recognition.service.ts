@@ -45,6 +45,7 @@ export class ImageRecognitionService {
    * @param returnStrategy - How to return results: 'sse', 'webhook', or 'polling'
    * @param webhookUrl - Optional webhook URL for webhook strategy
    * @param callbackHeaders - Optional headers for webhook callbacks
+   * @param language - OCR language code (e.g., 'deu', 'eng', 'deu+eng'). Defaults to 'deu'
    * @returns Promise resolving to unique job ID
    */
   async startImageRecognitionOnBuffer(
@@ -52,6 +53,7 @@ export class ImageRecognitionService {
     returnStrategy: ReturnStrategy = 'sse',
     webhookUrl?: string,
     callbackHeaders?: Record<string, string>,
+    language: string = 'deu',
   ): Promise<string> {
     this._logger.debug('Starting OCR process...');
     const jobId = nanoid();
@@ -79,6 +81,7 @@ export class ImageRecognitionService {
       returnStrategy,
       webhookUrl,
       callbackHeaders,
+      language,
     );
 
     this._logger.debug(
@@ -139,6 +142,7 @@ export class ImageRecognitionService {
    * @param returnStrategy - How to return results
    * @param webhookUrl - Optional webhook URL
    * @param callbackHeaders - Optional webhook headers
+   * @param language - OCR language code (e.g., 'deu', 'eng', 'deu+eng')
    * @private
    */
   private async _processImageAsync(
@@ -147,6 +151,7 @@ export class ImageRecognitionService {
     returnStrategy: ReturnStrategy,
     webhookUrl?: string,
     callbackHeaders?: Record<string, string>,
+    language: string = 'deu',
   ) {
     const progressSubject = this._progressStreams.get(jobId);
     const inputPath = join(this._tempDir, `input_${jobId}.png`);
@@ -157,7 +162,7 @@ export class ImageRecognitionService {
 
       // PROCESS IMAGE WITH BOTH TESSERACT AND ZBAR IN PARALLEL
       const [textResults, codes] = await Promise.all([
-        this.tesseractService.processImage(inputPath).catch((error) => {
+        this.tesseractService.processImage(inputPath, language).catch((error) => {
           this._logger.warn(`OCR processing failed: ${error.message}`);
           return []; // CONTINUE EVEN IF OCR FAILS
         }),

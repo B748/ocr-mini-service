@@ -146,10 +146,11 @@ export class OcrService {
   /**
    * Processes an image file using Tesseract OCR
    * @param inputPath - Path to the input image file
+   * @param language - OCR language code (e.g., 'deu', 'eng', 'deu+eng'). Defaults to 'deu'
    * @returns Promise resolving to array of OCR results with text and bounding boxes
    * @throws {Error} When OCR processing fails
    */
-  async processImage(inputPath: string): Promise<DimensionData<TextContent>[]> {
+  async processImage(inputPath: string, language: string = 'deu'): Promise<DimensionData<TextContent>[]> {
     // CHECK IF TESSERACT IS AVAILABLE
     await this._checkTesseractAvailability();
     const jobId = nanoid();
@@ -161,7 +162,7 @@ export class OcrService {
 
     try {
       // RUN TESSERACT WITH TSV OUTPUT FOR DETAILED WORD-LEVEL DATA
-      await this._runTesseract(inputPath, outputBasePath);
+      await this._runTesseract(inputPath, outputBasePath, language);
 
       // CHECK IF TSV OUTPUT WAS CREATED
       try {
@@ -198,6 +199,7 @@ export class OcrService {
    * Runs Tesseract OCR process on an input image file
    * @param inputPath - Path to the input image file
    * @param outputBasePath - Base path for output files (without extension)
+   * @param language - OCR language code (e.g., 'deu', 'eng', 'deu+eng')
    * @returns Promise that resolves when Tesseract processing completes
    * @throws {Error} When Tesseract process fails
    * @private
@@ -205,11 +207,11 @@ export class OcrService {
   private async _runTesseract(
     inputPath: string,
     outputBasePath: string,
+    language: string,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       // USE TSV OUTPUT FORMAT FOR DETAILED WORD-LEVEL INFORMATION
-      // -L DEU+ENG FOR GERMAN AND ENGLISH
-      const args = [inputPath, outputBasePath, '-l', 'deu+eng', 'tsv'];
+      const args = [inputPath, outputBasePath, '-l', language, 'tsv'];
 
       this._logger.debug(`Running Tesseract with args: ${args.join(' ')}`);
 

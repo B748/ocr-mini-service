@@ -102,6 +102,7 @@ export class ImageRecognitionController {
       returnStrategy?: ReturnStrategy;
       webhookUrl?: string;
       callbackHeaders?: Record<string, string>;
+      language?: string;
     } = JSON.parse(body.body || '{}');
 
     // VALIDATE RETURN STRATEGY
@@ -124,6 +125,7 @@ export class ImageRecognitionController {
       parsedBody.returnStrategy,
       parsedBody.webhookUrl,
       parsedBody?.callbackHeaders,
+      parsedBody?.language,
     );
 
     const response: any = {
@@ -177,7 +179,8 @@ export class ImageRecognitionController {
       buffer,
       options.returnStrategy,
       fullWebhookUrl,
-      options.callbackHeaders
+      options.callbackHeaders,
+      options.language,
     );
   }
 
