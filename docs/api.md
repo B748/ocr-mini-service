@@ -53,6 +53,7 @@ Content-Type: multipart/form-data
 image: [file]
 returnStrategy: [sse|webhook|polling]
 webhookUrl: [url] (required for webhook strategy)
+language: [deu|eng|deu+eng]
 ```
 
 **Parameters:**
@@ -60,6 +61,7 @@ webhookUrl: [url] (required for webhook strategy)
 - `returnStrategy` (query, optional) - Return strategy: `sse` (default), `webhook`, or `polling`
 - `webhookUrl` (query, optional) - Webhook URL (required when returnStrategy=webhook)
 - `callbackHeaders` (body, optional) - JSON object with custom headers for webhook requests
+- `language` (body, optional) - OCR language: `deu` (default), `eng`, or `deu+eng` for mixed documents
 
 **Response (SSE strategy):**
 ```json
@@ -237,6 +239,7 @@ Content-Type: application/octet-stream
 - `returnStrategy` (query, optional) - Return strategy: `sse` (default), `webhook`, or `polling`
 - `webhookUrl` (query, optional) - Webhook URL (required when returnStrategy=webhook)
 - `callbackHeaders` (query, optional) - JSON string with custom headers for webhook requests
+- `language` (query, optional) - OCR language: `deu` (default), `eng`, or `deu+eng` for mixed documents
 
 **Response:** Same format as `/ocr/process` endpoint based on return strategy.
 
@@ -410,7 +413,7 @@ When using the webhook return strategy, the service will send HTTP POST requests
 
 ### JavaScript/Node.js
 
-#### Basic OCR Request
+#### Basic OCR Request (German - Default)
 ```javascript
 const FormData = require('form-data');
 const fs = require('fs');
@@ -418,6 +421,28 @@ const fs = require('fs');
 async function processImage(imagePath) {
   const form = new FormData();
   form.append('image', fs.createReadStream(imagePath));
+  
+  const response = await fetch('http://localhost:8600/ocr/process', {
+    method: 'POST',
+    body: form
+  });
+  
+  const result = await response.json();
+  console.log('Job started:', result.jobId);
+  
+  return result.jobId;
+}
+```
+
+#### OCR Request with Language Selection
+```javascript
+async function processImageWithLanguage(imagePath, language = 'deu') {
+  const form = new FormData();
+  form.append('image', fs.createReadStream(imagePath));
+  form.append('body', JSON.stringify({
+    returnStrategy: 'sse',
+    language: language
+  }));
   
   const response = await fetch('http://localhost:8600/ocr/process', {
     method: 'POST',
@@ -466,10 +491,18 @@ function monitorProgress(jobId) {
 
 ### cURL Examples
 
-#### Submit OCR Request (SSE - Default)
+#### Submit OCR Request (SSE - Default, German)
 ```bash
 curl -X POST \
   -F "image=@/path/to/image.jpg" \
+  http://localhost:8600/ocr/process
+```
+
+#### Submit OCR Request (English Language)
+```bash
+curl -X POST \
+  -F "image=@/path/to/image.jpg" \
+  -F 'body={"returnStrategy":"sse","language":"eng"}' \
   http://localhost:8600/ocr/process
 ```
 
@@ -477,10 +510,7 @@ curl -X POST \
 ```bash
 curl -X POST \
   -F "image=@/path/to/image.jpg" \
-  -F "returnStrategy=webhook" \
-  -F "webhookUrl=https://your-app.com/webhook" \
-  -H "Content-Type: multipart/form-data" \
-  -d '{"callbackHeaders": {"Authorization": "Bearer token123"}}' \
+  -F 'body={"returnStrategy":"webhook","webhookUrl":"https://your-app.com/webhook","callbackHeaders":{"Authorization":"Bearer token123"}}' \
   http://localhost:8600/ocr/process
 ```
 
@@ -488,7 +518,7 @@ curl -X POST \
 ```bash
 curl -X POST \
   -F "image=@/path/to/image.jpg" \
-  -F "returnStrategy=polling" \
+  -F 'body={"returnStrategy":"polling"}' \
   http://localhost:8600/ocr/process
 ```
 
@@ -508,7 +538,7 @@ curl http://localhost:8600/ocr/status/550e8400-e29b-41d4-a716-446655440000
 curl http://localhost:8600/ocr/status
 ```
 
-#### Buffer Mode with Webhook
+#### Buffer Mode with Webhook and Language
 ```bash
 curl -X POST \
   --data-binary @/path/to/image.jpg \
@@ -516,6 +546,7 @@ curl -X POST \
   -G -d "returnStrategy=webhook" \
   -d "webhookUrl=https://your-app.com/webhook" \
   -d 'callbackHeaders={"Authorization":"Bearer token"}' \
+  -d "language=eng" \
   http://localhost:8600/ocr/process-buffer
 ```
 
@@ -609,10 +640,16 @@ The service processes one OCR request at a time. Concurrent requests will be rej
 ## Language Support
 
 Currently supported languages:
-- **German** (deu)
+- **German** (deu) - Default
 - **English** (eng)
+- **Mixed** (deu+eng) - For documents with both languages
 
-The service automatically uses both languages for optimal text recognition.
+**Default Behavior:** The service uses German (`deu`) by default, which provides optimal recognition for German characters (ä, ö, ü, ß). Specify a different language in the request body if needed.
+
+**Language Selection Guidelines:**
+- Use `deu` for German documents (default, no need to specify)
+- Use `eng` for English-only documents
+- Use `deu+eng` only for documents containing both German and English text
 
 ## Performance Considerations
 

@@ -58,15 +58,22 @@ The API will be available at `http://localhost:8600`
 
 ### Example Usage
 ```bash
-# SSE (default)
+# SSE (default, German language)
 curl -X POST -F "image=@image.jpg" http://localhost:8600/ocr/process
 
+# English language
+curl -X POST -F "image=@image.jpg" \
+  -F 'body={"returnStrategy":"sse","language":"eng"}' \
+  http://localhost:8600/ocr/process
+
 # Webhook
-curl -X POST -F "image=@image.jpg" -F "returnStrategy=webhook" \
-  -F "webhookUrl=https://your-app.com/webhook" http://localhost:8600/ocr/process
+curl -X POST -F "image=@image.jpg" \
+  -F 'body={"returnStrategy":"webhook","webhookUrl":"https://your-app.com/webhook"}' \
+  http://localhost:8600/ocr/process
 
 # Polling
-curl -X POST -F "image=@image.jpg" -F "returnStrategy=polling" \
+curl -X POST -F "image=@image.jpg" \
+  -F 'body={"returnStrategy":"polling"}' \
   http://localhost:8600/ocr/process
 ```
 
