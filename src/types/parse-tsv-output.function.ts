@@ -1,6 +1,94 @@
 import { DimensionData, TextContent } from './ocr.types';
 import { nanoid } from './nanoid.function';
 
+// CHARACTERS WITH DESCENDERS THAT EXTEND BELOW THE BASELINE
+const DESCENDER_CHARS = new Set([
+  // lowercase letters
+  'g',
+  'j',
+  'p',
+  'q',
+  'y',
+
+  // letters with cedilla / comma / ogonek
+  'ç',
+  'ģ',
+  'ķ',
+  'ļ',
+  'ą',
+  'ę',
+  'į',
+  'ų',
+  'ș',
+  'ț',
+  'Ș',
+  'Ț',
+
+  // extended Latin / phonetic
+  'ŋ',
+  'ɟ',
+  'ʝ',
+  'ɡ',
+  'ɣ',
+  'ʄ',
+  'ȷ',
+
+  // punctuation
+  ',',
+  ';',
+  '‚',
+  '„',
+  '¿',
+
+  // brackets / delimiters (font-dependent but common)
+  '(',
+  ')',
+  '[',
+  ']',
+  '{',
+  '}',
+
+  // math / technical
+  '∫',
+  '∮',
+  '∂',
+  'ƒ',
+  '₍',
+  '₎',
+
+  // currency
+  '₤',
+  '₺',
+  '₥',
+  '₰',
+]);
+
+// FACTOR FOR DESCENDER SPACE (APPROXIMATELY 23% OF TEXT HEIGHT)
+const DESCENDER_FACTOR = 0.23;
+
+/**
+ * Calculates baseline position for a word based on character composition
+ * @param text - The text content to analyze
+ * @param top - Normalized top position of the bounding box
+ * @param height - Normalized height of the bounding box
+ * @returns Normalized baseline position
+ */
+function calculateBaseline(text: string, top: number, height: number): number {
+  // CHECK IF TEXT CONTAINS ANY DESCENDER CHARACTERS
+  const hasDescenders = text
+    .toLowerCase()
+    .split('')
+    .some((char) => DESCENDER_CHARS.has(char));
+
+  if (hasDescenders) {
+    // BASELINE ABOVE BOTTOM TO ACCOUNT FOR DESCENDERS
+    return top + height * (1 - DESCENDER_FACTOR);
+  } else {
+    // BASELINE AT BOTTOM BORDER FOR TEXT WITHOUT DESCENDERS
+    return top + height;
+  }
+}
+
 /**
  * * `level`: hierarchical layout (a word is in a line, which is in a paragraph, which is in a block, which is in a page), a value from 1 to 5
  *   - `1`: page
@@ -44,7 +132,7 @@ export interface TesseractTsvLineData {
  * @throws {Error} When TSV parsing fails
  */
 export async function parseTsvOutput(
-  tsvContent: string[]
+  tsvContent: string[],
 ): Promise<DimensionData<TextContent>[]> {
   try {
     // SKIP HEADER LINE
@@ -53,8 +141,11 @@ export async function parseTsvOutput(
     const words: DimensionData<TextContent>[] = [];
 
     // CONSIDER `dataLines.shift()` TO GET AND PROCESS PAGE LINE
-    const l = dataLines.find( x => x[0] === '1' ).split('\t');
-    const pageSize = l && l.length === 12 ? { width: parseInt(l[8]), height: parseInt(l[9]) } : { width: 0, height: 0 };
+    const l = dataLines.find((x) => x[0] === '1').split('\t');
+    const pageSize =
+      l && l.length === 12
+        ? { width: parseInt(l[8]), height: parseInt(l[9]) }
+        : { width: 0, height: 0 };
 
     for (const line of dataLines) {
       const columns = line.split('\t');
@@ -87,6 +178,11 @@ export async function parseTsvOutput(
           top: lineData.top,
           width: lineData.width,
           height: lineData.height,
+          baseline: calculateBaseline(
+            lineData.text.trim(),
+            lineData.top,
+            lineData.height,
+          ),
           data: {
             id: wordId,
             text: lineData.text.trim(),
