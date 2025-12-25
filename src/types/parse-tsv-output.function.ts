@@ -192,9 +192,59 @@ export async function parseTsvOutput(
       }
     }
 
-    return words;
+    // SORT WORDS IN READING ORDER: TOP TO BOTTOM BY BASELINE, LEFT TO RIGHT WITHIN LINES
+    return sortWordsInReadingOrder(words);
   } catch (error) {
     this.logger.error('Failed to parse TSV output', error);
     throw new Error(`Failed to parse OCR results: ${error.message}`);
   }
+}
+
+/**
+ * Sorts words in natural reading order by grouping words with similar baselines and sorting by position
+ * @param words - Array of word elements with baseline and position data
+ * @returns Array of words sorted in reading order (top to bottom, left to right)
+ */
+function sortWordsInReadingOrder(words: DimensionData<TextContent>[]): DimensionData<TextContent>[] {
+  const BASELINE_TOLERANCE = 0.0025;
+  
+  if (words.length === 0) return words;
+  
+  // GROUP WORDS BY BASELINE WITHIN TOLERANCE
+  const lineGroups: DimensionData<TextContent>[][] = [];
+  
+  for (const word of words) {
+    const wordBaseline = word.baseline!;
+    
+    // FIND EXISTING GROUP WITH SIMILAR BASELINE
+    let foundGroup = false;
+    for (const group of lineGroups) {
+      const groupBaseline = group[0].baseline!;
+      if (Math.abs(wordBaseline - groupBaseline) <= BASELINE_TOLERANCE) {
+        group.push(word);
+        foundGroup = true;
+        break;
+      }
+    }
+    
+    // CREATE NEW GROUP IF NO MATCH FOUND
+    if (!foundGroup) {
+      lineGroups.push([word]);
+    }
+  }
+  
+  // SORT GROUPS BY AVERAGE BASELINE (TOP TO BOTTOM)
+  lineGroups.sort((a, b) => {
+    const avgBaselineA = a.reduce((sum, word) => sum + word.baseline!, 0) / a.length;
+    const avgBaselineB = b.reduce((sum, word) => sum + word.baseline!, 0) / b.length;
+    return avgBaselineA - avgBaselineB;
+  });
+  
+  // SORT WORDS WITHIN EACH GROUP BY LEFT POSITION (LEFT TO RIGHT)
+  for (const group of lineGroups) {
+    group.sort((a, b) => a.left - b.left);
+  }
+  
+  // FLATTEN GROUPS BACK TO SINGLE ARRAY
+  return lineGroups.flat();
 }
